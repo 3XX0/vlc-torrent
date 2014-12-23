@@ -1,0 +1,621 @@
+From 9a6de12fac469534a49c0ac7bc00f7f4aad3bbaf Mon Sep 17 00:00:00 2001
+From: Jonathan Calmels <jbjcalmels@gmail.com>
+Date: Sat, 20 Sep 2014 17:21:36 +0200
+Subject: [PATCH] first try
+
+---
+ configure.ac                       |   5 +
+ modules/access/Makefile.am         |   7 ++
+ modules/access/torrent/access.cpp  | 186 +++++++++++++++++++++++++++++++++++++
+ modules/access/torrent/thread.h    |  90 ++++++++++++++++++
+ modules/access/torrent/torrent.cpp | 169 +++++++++++++++++++++++++++++++++
+ modules/access/torrent/torrent.h   |  97 +++++++++++++++++++
+ 6 files changed, 554 insertions(+)
+ create mode 100644 modules/access/torrent/access.cpp
+ create mode 100644 modules/access/torrent/thread.h
+ create mode 100644 modules/access/torrent/torrent.cpp
+ create mode 100644 modules/access/torrent/torrent.h
+
+diff --git a/configure.ac b/configure.ac
+index 2b2a815..78c23af 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1589,6 +1589,11 @@ dnl
+ PKG_ENABLE_MODULES_VLC([ARCHIVE], [access_archive], [libarchive >= 2.8.5], (libarchive support), [auto])
+ 
+ dnl
++dnl libtorrent
++dnl
++PKG_ENABLE_MODULES_VLC([TORRENT], [access_torrent], [libtorrent-rasterbar], (libtorrent support), [auto])
++
++dnl
+ dnl  live555 input
+ dnl
+ AC_ARG_ENABLE(live555,
+diff --git a/modules/access/Makefile.am b/modules/access/Makefile.am
+index f0ad4f4..d2e4a49 100644
+--- a/modules/access/Makefile.am
++++ b/modules/access/Makefile.am
+@@ -30,6 +30,13 @@ access_LTLIBRARIES += libfilesystem_plugin.la
+ libidummy_plugin_la_SOURCES = access/idummy.c
+ access_LTLIBRARIES += libidummy_plugin.la
+ 
++libaccess_torrent_plugin_la_SOURCES = access/torrent/access.cpp access/torrent/torrent.cpp
++libaccess_torrent_plugin_la_CXXFLAGS = $(AM_CXXFLAGS) "-std=c++14" $(TORRENT_CFLAGS)
++libaccess_torrent_plugin_la_LIBADD = $(AM_LIBADD) $(TORRENT_LIBS)
++libaccess_torrent_plugin_la_LDFLAGS = $(AM_LDFLAGS) -rpath '$(accessdir)'
++access_LTLIBRARIES += $(LTLIBaccess_torrent)
++EXTRA_LTLIBRARIES += libaccess_torrent_plugin.la
++
+ libimem_plugin_la_SOURCES = access/imem.c
+ libimem_plugin_la_LIBADD = $(LIBM)
+ access_LTLIBRARIES += libimem_plugin.la
+diff --git a/modules/access/torrent/access.cpp b/modules/access/torrent/access.cpp
+new file mode 100644
+index 0000000..bb95d08
+--- /dev/null
++++ b/modules/access/torrent/access.cpp
+@@ -0,0 +1,186 @@
++#ifdef HAVE_CONFIG_H
++# include "config.h"
++#endif
++
++#include <vlc_common.h>
++#include <vlc_access.h>
++#include <vlc_plugin.h>
++#include <vlc_url.h>
++#include <vlc_input_item.h>
++#include <vlc_configuration.h>
++
++#include "torrent.h"
++
++static int Open(vlc_object_t*);
++static void Close(vlc_object_t*);
++static int ReadDir(access_t*, input_item_node_t*);
++static int Control(access_t*, int, va_list);
++static block_t* Block(access_t*);
++
++struct access_sys_t
++{
++    TorrentAccess torrent;
++};
++
++/*****************************************************************************
++ * Module descriptor
++ *****************************************************************************/
++
++#define DLDIR_TEXT N_("Download directory")
++#define DLDIR_LONGTEXT N_("Directory used to store dowloaded files")
++
++vlc_module_begin()
++
++    set_shortname(N_("Torrent"))
++    set_description(N_("Torrent file"))
++    set_capability("access", 51)
++    set_category(CAT_INPUT)
++    set_subcategory(SUBCAT_INPUT_ACCESS)
++    add_shortcut("torrent", "file")
++    set_callbacks(Open, Close)
++
++    add_integer("file_at", nullptr, nullptr, nullptr, false)
++    change_private()
++    add_string("download_dir", nullptr, DLDIR_TEXT, DLDIR_LONGTEXT, false)
++
++    // TODO
++    //add_submodule()
++    //    set_section( N_("Magnet input" ), NULL )
++    //    set_capability( "access", 0 )
++    //    add_shortcut( "magnet" )
++    //set_callbacks( Open, Close )
++
++vlc_module_end()
++
++/*****************************************************************************
++ * Open:
++ *****************************************************************************/
++
++static unique_cptr var_GetDownloadDir(const access_t* p_access)
++{
++    auto dir = var_InheritString(p_access, "download_dir");
++    if (dir == nullptr)
++        dir = config_GetUserDir(VLC_DOWNLOAD_DIR);
++    return {dir, std::free};
++}
++
++static int open(access_t* p_access)
++{
++    auto dir = var_GetDownloadDir(p_access);
++    if (dir == nullptr)
++        return VLC_EGENERIC;
++    auto info = TorrentAccess::ParseURI(p_access->psz_location);
++    if (info == nullptr)
++        return VLC_EGENERIC;
++    p_access->p_sys = new access_sys_t{{p_access}};
++
++    auto& torrent = p_access->p_sys->torrent;
++    auto file_at = var_InheritInteger(p_access, "file_at");
++
++    torrent.set_download_dir(std::move(dir));
++    torrent.set_info(std::move(info));
++
++    if (file_at == 0) { // Browse the torrent file and list the files in it.
++        ACCESS_SET_CALLBACKS(nullptr, nullptr, Control, nullptr);
++        p_access->pf_readdir = ReadDir;
++        return VLC_SUCCESS;
++    }
++
++    // Torrent file has been browsed, start the download.
++    ACCESS_SET_CALLBACKS(nullptr, Block, Control, nullptr);
++    torrent.set_file(file_at);
++    return torrent.StartDownload();
++}
++
++static int Open(vlc_object_t* p_this)
++{
++    auto p_access = (access_t*) p_this;
++    access_InitFields(p_access);
++
++    try {
++        auto r = open(p_access);
++        if (r != VLC_SUCCESS)
++            delete p_access->p_sys;
++        return r;
++    }
++    catch (std::bad_alloc& e) {
++        delete p_access->p_sys;
++        return VLC_ENOMEM;
++    }
++}
++
++/*****************************************************************************
++ * Close:
++ *****************************************************************************/
++
++static void Close(vlc_object_t* p_this)
++{
++    auto p_access = (access_t*) p_this;
++    delete p_access->p_sys;
++}
++
++/*****************************************************************************
++ * Callbacks
++ *****************************************************************************/
++
++static int ReadDir(access_t* p_access, input_item_node_t* p_node)
++{
++    const auto& torrent = p_access->p_sys->torrent;
++    const auto& info = torrent.info();
++
++    msg_Info(p_access, "Browsing torrent file '%s'", info.name().c_str());
++
++    auto i = 1;
++    for (auto f = info.begin_files(); f != info.end_files(); ++f, ++i) {
++        const auto psz_uri = p_node->p_item->psz_uri;
++        const auto psz_name = f->filename();
++        const auto psz_option = "file_at=" + std::to_string(i);
++
++        auto p_item = input_item_New(psz_uri, psz_name.c_str());
++        input_item_AddOption(p_item, psz_option.c_str(), VLC_INPUT_OPTION_TRUSTED);
++        input_item_node_AppendItem(p_node, p_item);
++        input_item_Release(p_item);
++
++        msg_Info(p_access, "Adding '%s'", psz_name.c_str());
++    }
++    return VLC_SUCCESS;
++}
++
++static int Control(access_t* p_access, int i_query, va_list args)
++{
++    switch(i_query) {
++    case ACCESS_CAN_SEEK:
++    case ACCESS_CAN_FASTSEEK:
++        *va_arg(args, bool*) = false;
++        break;
++
++    case ACCESS_CAN_PAUSE:
++    case ACCESS_CAN_CONTROL_PACE:
++        *va_arg(args, bool*) = true;
++        break;
++
++    case ACCESS_GET_PTS_DELAY:
++        *va_arg(args, int64_t *) = DEFAULT_PTS_DELAY * 1000;
++        break;
++
++    case ACCESS_SET_PAUSE_STATE:
++    case ACCESS_GET_TITLE_INFO:
++    case ACCESS_SET_TITLE:
++    case ACCESS_SET_SEEKPOINT:
++    case ACCESS_SET_PRIVATE_ID_STATE:
++        return VLC_EGENERIC;
++
++    default:
++        msg_Warn(p_access, "unimplemented query in control");
++        return VLC_EGENERIC;
++    }
++
++    return VLC_SUCCESS;
++}
++
++static block_t* Block(access_t* p_access)
++{
++    auto& torrent = p_access->p_sys->torrent;
++    auto p = torrent.ReadNextPiece();
++    return p.data;
++}
+diff --git a/modules/access/torrent/thread.h b/modules/access/torrent/thread.h
+new file mode 100644
+index 0000000..267e5a5
+--- /dev/null
++++ b/modules/access/torrent/thread.h
+@@ -0,0 +1,90 @@
++#pragma once
++
++#include <mutex>
++#include <functional>
++
++#include <vlc_access.h>
++#include <vlc_threads.h>
++
++namespace VLC {
++
++class Mutex
++{
++    friend class CondVar;
++
++    public:
++        Mutex() {
++            vlc_mutex_init(&lock_);
++        }
++        ~Mutex() {
++            vlc_mutex_destroy(&lock_);
++        }
++
++        void lock() {
++            vlc_mutex_lock(&lock_);
++        }
++        void unlock() noexcept {
++            vlc_mutex_unlock(&lock_);
++        }
++
++    private:
++        vlc_mutex_t lock_;
++};
++
++class CondVar
++{
++    public:
++        CondVar() {
++            vlc_cond_init(&cond_);
++        }
++        ~CondVar() {
++            vlc_cond_destroy(&cond_);
++        }
++
++        template <class Predicate>
++        void wait_for(std::unique_lock<Mutex>& m, mtime_t t, Predicate p) {
++            while (!p())
++                vlc_cond_timedwait(&cond_, &m.mutex()->lock_, t);
++        }
++        void signal() {
++            vlc_cond_signal(&cond_);
++        }
++
++    private:
++        vlc_cond_t        cond_;
++};
++
++class JoinableThread
++{
++    public:
++        JoinableThread() = default;
++        ~JoinableThread() {
++            if (joinable_)
++                vlc_join(thread_, nullptr);
++        }
++
++        template <class Functor>
++        int Start(access_t* access, const Functor& func);
++
++    private:
++        vlc_thread_t  thread_;
++        bool          joinable_ = false;
++};
++
++template <class Functor>
++int JoinableThread::Start(access_t* access, const Functor& func)
++{
++    static auto trampoline = func;
++
++    auto f = [](void*) -> void* {
++        trampoline();
++        return nullptr;
++    };
++    if (vlc_clone(&thread_, f, access, VLC_THREAD_PRIORITY_INPUT) != VLC_SUCCESS)
++        return VLC_EGENERIC;
++
++    joinable_ = true;
++    return VLC_SUCCESS;
++}
++
++}
+diff --git a/modules/access/torrent/torrent.cpp b/modules/access/torrent/torrent.cpp
+new file mode 100644
+index 0000000..f07d699
+--- /dev/null
++++ b/modules/access/torrent/torrent.cpp
+@@ -0,0 +1,169 @@
++#include <cassert>
++#include <cmath>
++#include <cstring>
++#include <algorithm>
++#include <functional>
++
++#include <libtorrent/alert_types.hpp>
++
++#include "torrent.h"
++
++std::unique_ptr<lt::torrent_info> TorrentAccess::ParseURI(const std::string& uri)
++{
++    lt::error_code ec;
++
++    auto info = std::make_unique<lt::torrent_info>(uri, ec);
++    if (ec)
++        return nullptr;
++    return info;
++}
++
++int TorrentAccess::StartDownload()
++{
++    lt::add_torrent_params params;
++    lt::error_code ec;
++
++    assert(file_at_ > 0 && info_ != nullptr && download_dir_ != nullptr);
++
++    params.ti = new lt::torrent_info{*info_};
++    params.save_path = download_dir_.get();
++    params.storage_mode = lt::storage_mode_allocate;
++    session_.set_alert_mask(lt::alert::status_notification | lt::alert::storage_notification | lt::alert::progress_notification);
++    handle_ = session_.add_torrent(params, ec);
++    if (ec)
++        return VLC_EGENERIC;
++
++    SelectPieces(0);
++    handle_.set_sequential_download(true);
++
++    auto run = std::bind(std::mem_fn(&TorrentAccess::Run), this);
++    return thread_.Start(access_, run);
++}
++
++void TorrentAccess::Run()
++{
++    std::deque<lt::alert*> alerts;
++
++    while (!stopped_) {
++        if (!session_.wait_for_alert(lt::time_duration(100))) // TODO time
++            continue;
++
++        session_.pop_alerts(&alerts);
++        for (const auto a : alerts) {
++            switch (a->type()) {
++                case lt::piece_finished_alert::alert_type:
++                    std::cout << a->message() << std::endl;
++                    break;
++                case lt::state_changed_alert::alert_type:
++                    HandleStateChanged(a);
++                    break;
++                case lt::read_piece_alert::alert_type:
++                    HandleReadPiece(a);
++                    break;
++            }
++        }
++        alerts.clear();
++    }
++}
++
++void TorrentAccess::SelectPieces(size_t offset)
++{
++    const auto& file = info_->file_at(file_at_ - 1);
++    auto req = info_->map_file(file_at_ - 1, offset, file.size - offset);
++    auto piece_size = info_->piece_length();
++    auto num_pieces = info_->num_pieces();
++    auto req_pieces = std::ceil((float) req.length / piece_size);
++
++    for (auto i = 0; i < num_pieces; ++i) {
++        if (i < req.piece || i >= req.piece + req_pieces) {
++            handle_.piece_priority(i, 0); // Discard unwanted pieces.
++            continue;
++        }
++
++        auto len = 0;
++        auto off = 0;
++        if (i == req.piece) { // First piece.
++            off = req.start;
++            len = (req.length < piece_size - off) ? req.length : piece_size - off;
++        }
++        else if (i == req.piece + req_pieces - 1) // Last piece.
++            len = req.length;
++        else
++            len = piece_size;
++
++        handle_.piece_priority(i, 7);
++        queue_.pieces.push_back({i, off, len, nullptr});
++        req.length -= len;
++    }
++}
++
++void TorrentAccess::HandleStateChanged(const lt::alert* alert)
++{
++    const auto a = lt::alert_cast<lt::state_changed_alert>(alert);
++    const char* msg;
++
++    switch (a->state) {
++        case lt::torrent_status::queued_for_checking:
++            msg = "Queued for checking";
++            break;
++        case lt::torrent_status::downloading_metadata:
++            msg = "Downloading metadata";
++            break;
++        case lt::torrent_status::finished:
++            msg = "Finished";
++            break;
++        case lt::torrent_status::allocating:
++            msg = "Allocating space";
++            break;
++        case lt::torrent_status::checking_resume_data:
++            msg = "Resuming";
++            break;
++        case lt::torrent_status::checking_files:
++            msg = "Checking files";
++            break;
++        case lt::torrent_status::seeding:
++            msg = "Seeding";
++            break;
++        case lt::torrent_status::downloading:
++            msg = "Downloading";
++            break;
++        default:
++            return;
++    }
++    msg_Info(access_, "State changed to: %s", msg);
++}
++
++void TorrentAccess::HandleReadPiece(const lt::alert* alert) // TODO read error
++{
++    const auto a = lt::alert_cast<lt::read_piece_alert>(alert);
++
++    std::unique_lock<VLC::Mutex> lock{queue_.lock};
++
++    auto p = std::find_if(std::begin(queue_.pieces), std::end(queue_.pieces),
++      [a](const Piece& p) { return a->piece == p.id; }
++    );
++    assert(p != std::end(queue_.pieces) && a->size >= p->length);
++    p->data = block_Alloc(p->length);
++    std::memcpy(p->data->p_buffer, a->buffer.get() + p->offset, p->length);
++
++    if (p->id == queue_.pieces.front().id)
++        queue_.cond.signal();
++}
++
++Piece TorrentAccess::ReadNextPiece()
++{
++    while (handle_.status().state != lt::torrent_status::downloading)
++        mwait(mdate() + 1000);
++
++    auto& next_piece = queue_.pieces.front();
++    handle_.set_piece_deadline(next_piece.id, 0, lt::torrent_handle::alert_when_available);
++
++    std::cout << "Request Block " << next_piece.id << std::endl;
++    std::unique_lock<VLC::Mutex> lock{queue_.lock};
++
++    queue_.cond.wait_for(lock, 100, [&next_piece]{ return next_piece.data != nullptr; }); // TODO time
++    auto p = std::move(next_piece);
++    queue_.pieces.pop_front();
++    std::cout << "Got Block " << p.id << std::endl;
++    return p;
++}
+diff --git a/modules/access/torrent/torrent.h b/modules/access/torrent/torrent.h
+new file mode 100644
+index 0000000..5ac0b23
+--- /dev/null
++++ b/modules/access/torrent/torrent.h
+@@ -0,0 +1,97 @@
++#pragma once
++
++#include <string>
++#include <cstdlib>
++#include <memory>
++#include <deque>
++#include <atomic>
++
++#include <vlc_common.h>
++#include <vlc_access.h>
++
++#include <libtorrent/session.hpp>
++#include <libtorrent/torrent_handle.hpp>
++#include <libtorrent/torrent_info.hpp>
++
++#include "thread.h"
++
++namespace lt = libtorrent;
++
++using unique_cptr = std::unique_ptr<char, void (*)(void*)>;
++
++struct Piece
++{
++    int       id;
++    int       offset;
++    int       length;
++    block_t*  data;
++};
++
++struct PiecesQueue
++{
++    VLC::Mutex        lock;
++    VLC::CondVar      cond;
++    std::deque<Piece> pieces;
++};
++
++class TorrentAccess
++{
++    public:
++        TorrentAccess(access_t* p_access) :
++            access_{p_access},
++            file_at_{0},
++            stopped_{false},
++            fingerprint_{"VO", LIBTORRENT_VERSION_MAJOR, LIBTORRENT_VERSION_MINOR, 0, 0},
++            session_{fingerprint_},
++            download_dir_{nullptr, std::free}
++        {}
++        ~TorrentAccess() {
++            stopped_ = true;
++        }
++
++        static std::unique_ptr<lt::torrent_info> ParseURI(const std::string& uri);
++        int StartDownload();
++        Piece ReadNextPiece();
++
++        void set_file(int file_at);
++        void set_download_dir(unique_cptr dir);
++        void set_info(std::unique_ptr<lt::torrent_info> info);
++        const lt::torrent_info& info() const;
++
++    private:
++        void Run();
++        void SelectPieces(size_t offset);
++        void HandleStateChanged(const lt::alert* alert);
++        void HandleReadPiece(const lt::alert* alert);
++
++        access_t*                         access_;
++        int                               file_at_;
++        std::atomic_bool                  stopped_;
++        VLC::JoinableThread               thread_;
++        lt::fingerprint                   fingerprint_;
++        lt::session                       session_;
++        unique_cptr                       download_dir_;
++        PiecesQueue                       queue_;
++        std::unique_ptr<lt::torrent_info> info_;
++        lt::torrent_handle                handle_;
++};
++
++inline void TorrentAccess::set_file(int file_at)
++{
++    file_at_ = file_at;
++}
++
++inline void TorrentAccess::set_download_dir(unique_cptr dir)
++{
++    download_dir_ = std::move(dir);
++}
++
++inline void TorrentAccess::set_info(std::unique_ptr<lt::torrent_info> info)
++{
++    info_ = std::move(info);
++}
++
++inline const lt::torrent_info& TorrentAccess::info() const
++{
++    return *info_;
++}
+-- 
+2.1.3
+
