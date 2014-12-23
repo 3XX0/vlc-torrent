@@ -181,9 +181,6 @@ static int Control(access_t* p_access, int i_query, va_list args)
 static block_t* Block(access_t* p_access)
 {
     auto& torrent = p_access->p_sys->torrent;
-
-    std::cout << "1 Block" << std::endl;
     auto p = torrent.ReadNextPiece();
-    std::cout << "2 Block " << p.id << std::endl;
     return p.data;
 }

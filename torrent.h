@@ -5,35 +5,19 @@
 #include <memory>
 #include <deque>
 #include <atomic>
-#include <functional>
 
 #include <vlc_common.h>
 #include <vlc_access.h>
-#include <vlc_threads.h>
 
 #include <libtorrent/session.hpp>
 #include <libtorrent/torrent_handle.hpp>
 #include <libtorrent/torrent_info.hpp>
 
+#include "thread.h"
+
 namespace lt = libtorrent;
 
 using unique_cptr = std::unique_ptr<char, void (*)(void*)>;
-
-class JoinableThread
-{
-    public:
-        JoinableThread() = default;
-        ~JoinableThread() {
-            if (joinable_)
-                vlc_join(thread_, nullptr);
-        }
-
-        int Start(access_t* access, const std::function<void()>& func);
-
-    private:
-        vlc_thread_t  thread_;
-        bool          joinable_ = false;
-};
 
 struct Piece
 {
@@ -45,17 +29,8 @@ struct Piece
 
 struct PiecesQueue
 {
-    PiecesQueue() {
-        vlc_mutex_init(&lock);
-        vlc_cond_init(&cond);
-    }
-    ~PiecesQueue() {
-        vlc_mutex_destroy(&lock);
-        vlc_cond_destroy(&cond);
-    }
-
-    vlc_mutex_t       lock;
-    vlc_cond_t        cond;
+    VLC::Mutex        lock;
+    VLC::CondVar      cond;
     std::deque<Piece> pieces;
 };
 
@@ -75,7 +50,6 @@ class TorrentAccess
         }
 
         static std::unique_ptr<lt::torrent_info> ParseURI(const std::string& uri);
-
         int StartDownload();
         Piece ReadNextPiece();
 
@@ -93,7 +67,7 @@ class TorrentAccess
         access_t*                         access_;
         int                               file_at_;
         std::atomic_bool                  stopped_;
-        JoinableThread                    thread_;
+        VLC::JoinableThread               thread_;
         lt::fingerprint                   fingerprint_;
         lt::session                       session_;
         unique_cptr                       download_dir_;
