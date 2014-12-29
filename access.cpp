@@ -46,9 +46,6 @@ struct access_sys_t
  * Module descriptor
  *****************************************************************************/
 
-#define DLDIR_TEXT N_("Download directory")
-#define DLDIR_LONGTEXT N_("Directory used to store dowloaded files")
-
 vlc_module_begin()
 
     set_shortname(N_("Torrent"))
@@ -61,7 +58,8 @@ vlc_module_begin()
 
     add_integer("file_at", nullptr, nullptr, nullptr, false)
     change_private()
-    add_string("download_dir", nullptr, DLDIR_TEXT, DLDIR_LONGTEXT, false)
+    add_string("download_dir", nullptr, "Download directory",
+      "Directory used to store dowloaded files", false)
 
     // TODO
     //add_submodule()

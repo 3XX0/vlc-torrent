@@ -48,7 +48,7 @@ int TorrentAccess::StartDownload()
     params.ti = new lt::torrent_info{*info_};
     params.save_path = download_dir_.get();
     params.storage_mode = lt::storage_mode_allocate;
-    session_.set_alert_mask(lt::alert::status_notification | lt::alert::storage_notification | lt::alert::progress_notification);
+    session_.set_alert_mask(lt::alert::status_notification | lt::alert::storage_notification);
     handle_ = session_.add_torrent(params, ec);
     if (ec)
         return VLC_EGENERIC;
@@ -71,9 +71,6 @@ void TorrentAccess::Run()
         session_.pop_alerts(&alerts);
         for (const auto a : alerts) {
             switch (a->type()) {
-                case lt::piece_finished_alert::alert_type:
-                    std::cout << a->message() << std::endl;
-                    break;
                 case lt::state_changed_alert::alert_type:
                     HandleStateChanged(a);
                     break;
@@ -163,9 +160,9 @@ void TorrentAccess::HandleReadPiece(const lt::alert* alert) // TODO read error
       [a](const Piece& p) { return a->piece == p.id; }
     );
     assert(p != std::end(queue_.pieces) && a->size >= p->length);
+
     p->data = block_Alloc(p->length);
     std::memcpy(p->data->p_buffer, a->buffer.get() + p->offset, p->length);
-
     if (p->id == queue_.pieces.front().id)
         queue_.cond.signal();
 }
@@ -177,13 +174,14 @@ Piece TorrentAccess::ReadNextPiece()
 
     auto& next_piece = queue_.pieces.front();
     handle_.set_piece_deadline(next_piece.id, 0, lt::torrent_handle::alert_when_available);
+    msg_Dbg(access_, "Piece requested: %d", next_piece.id);
 
-    std::cout << "Request Block " << next_piece.id << std::endl;
     std::unique_lock<VLC::Mutex> lock{queue_.lock};
 
     queue_.cond.wait_for(lock, 100, [&next_piece]{ return next_piece.data != nullptr; }); // TODO time
     auto p = std::move(next_piece);
     queue_.pieces.pop_front();
-    std::cout << "Got Block " << p.id << std::endl;
+
+    msg_Dbg(access_, "Got piece: %d", p.id);
     return p;
 }
