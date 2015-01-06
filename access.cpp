@@ -48,25 +48,19 @@ struct access_sys_t
 
 vlc_module_begin()
 
-    set_shortname(N_("Torrent"))
-    set_description(N_("Torrent file"))
+    set_shortname(N_("Torrent file and Magnet link"))
+    set_description(N_("Torrent file and Magnet link"))
     set_capability("access", 51)
     set_category(CAT_INPUT)
     set_subcategory(SUBCAT_INPUT_ACCESS)
-    add_shortcut("torrent", "file")
+    add_shortcut("torrent", "file", "magnet")
     set_callbacks(Open, Close)
 
     add_integer("file_at", nullptr, nullptr, nullptr, false)
     change_private()
+
     add_string("download_dir", nullptr, "Download directory",
       "Directory used to store dowloaded files", false)
-
-    // TODO
-    //add_submodule()
-    //    set_section( N_("Magnet input" ), NULL )
-    //    set_capability( "access", 0 )
-    //    add_shortcut( "magnet" )
-    //set_callbacks( Open, Close )
 
 vlc_module_end()
 
@@ -84,26 +78,33 @@ static unique_cptr var_GetDownloadDir(const access_t* p_access)
 
 static int open(access_t* p_access)
 {
+    lt::add_torrent_params params;
+
+    if (TorrentAccess::ParseURI(p_access->psz_location, params) != VLC_SUCCESS)
+        return VLC_EGENERIC;
+
     auto dir = var_GetDownloadDir(p_access);
     if (dir == nullptr)
         return VLC_EGENERIC;
-    auto info = TorrentAccess::ParseURI(p_access->psz_location);
-    if (info == nullptr)
-        return VLC_EGENERIC;
-    p_access->p_sys = new access_sys_t{{p_access}};
 
+    p_access->p_sys = new access_sys_t{{p_access}};
     auto& torrent = p_access->p_sys->torrent;
     auto file_at = var_InheritInteger(p_access, "file_at");
 
+    torrent.set_parameters(std::move(params));
     torrent.set_download_dir(std::move(dir));
-    torrent.set_info(std::move(info));
 
-    if (file_at == 0) { // Browse the torrent file and list the files in it.
+    if (!torrent.has_metadata()) {
+        // This is a magnet link, first we need to generate the torrent file.
+        if (torrent.RetrieveMetadata() != VLC_SUCCESS)
+            return VLC_EGENERIC;
+    }
+    if (file_at == 0) {
+        // Browse the torrent metadata and generate a playlist with the files in it.
         ACCESS_SET_CALLBACKS(nullptr, nullptr, Control, nullptr);
         p_access->pf_readdir = ReadDir;
         return VLC_SUCCESS;
     }
-
     // Torrent file has been browsed, start the download.
     ACCESS_SET_CALLBACKS(nullptr, Block, Control, nullptr);
     torrent.set_file(file_at);
@@ -144,13 +145,13 @@ static void Close(vlc_object_t* p_this)
 static int ReadDir(access_t* p_access, input_item_node_t* p_node)
 {
     const auto& torrent = p_access->p_sys->torrent;
-    const auto& info = torrent.info();
+    const auto& metadata = torrent.metadata();
 
-    msg_Info(p_access, "Browsing torrent file '%s'", info.name().c_str());
+    msg_Info(p_access, "Browsing torrent file '%s'", metadata.name().c_str());
 
     auto i = 1;
-    for (auto f = info.begin_files(); f != info.end_files(); ++f, ++i) {
-        const auto psz_uri = p_node->p_item->psz_uri;
+    for (auto f = metadata.begin_files(); f != metadata.end_files(); ++f, ++i) {
+        const auto psz_uri = torrent.uri().c_str();
         const auto psz_name = f->filename();
         const auto psz_option = "file_at=" + std::to_string(i);
 

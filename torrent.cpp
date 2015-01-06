@@ -23,33 +23,78 @@
 #include <cstring>
 #include <algorithm>
 #include <functional>
+#include <fstream>
 
 #include <libtorrent/alert_types.hpp>
+#include <libtorrent/create_torrent.hpp>
+#include <libtorrent/extensions/metadata_transfer.hpp>
+#include <libtorrent/extensions/ut_metadata.hpp>
+#include <libtorrent/magnet_uri.hpp>
+#include <libtorrent/bencode.hpp>
 
 #include "torrent.h"
 
-std::unique_ptr<lt::torrent_info> TorrentAccess::ParseURI(const std::string& uri)
+int TorrentAccess::ParseURI(const std::string& uri, lt::add_torrent_params& params)
+{
+    std::string prefix = "magnet:?";
+    lt::error_code ec;
+
+    if (!uri.compare(0, prefix.size(), prefix)) {
+        lt::parse_magnet_uri(uri, params, ec);
+        if (ec)
+            return VLC_EGENERIC;
+    }
+    else {
+        params.ti = new lt::torrent_info{uri, ec};
+        if (ec)
+            return VLC_EGENERIC;
+    }
+    return VLC_SUCCESS;
+}
+
+int TorrentAccess::RetrieveMetadata()
 {
     lt::error_code ec;
 
-    auto info = std::make_unique<lt::torrent_info>(uri, ec);
+    assert(download_dir_ != nullptr);
+
+    session_.set_alert_mask(lt::alert::status_notification);
+    session_.add_extension(&lt::create_metadata_plugin);
+    session_.add_extension(&lt::create_ut_metadata_plugin);
+    params_.url = access_->psz_location;
+    handle_ = session_.add_torrent(params_, ec);
     if (ec)
-        return nullptr;
-    return info;
+        return VLC_EGENERIC;
+
+    Run();
+    session_.remove_torrent(handle_);
+
+    const auto& metadata = handle_.get_torrent_info();
+    params_.ti = new lt::torrent_info{metadata};
+
+    // Create the torrent file.
+    auto torrent = lt::create_torrent{metadata};
+    auto path = download_dir_.get() + "/"s + metadata.name() + ".torrent";
+    std::ofstream file{path, std::ios_base::binary};
+    if (!file.is_open())
+        return VLC_EGENERIC;
+    lt::bencode(std::ostream_iterator<char>{file}, torrent.generate());
+    uri_ = "torrent://" + path; // Change the initial URI to point to the torrent generated.
+
+    msg_Info(access_, "Metadata successfully retrieved, torrent file created");
+    return VLC_SUCCESS;
 }
 
 int TorrentAccess::StartDownload()
 {
-    lt::add_torrent_params params;
     lt::error_code ec;
 
-    assert(file_at_ > 0 && info_ != nullptr && download_dir_ != nullptr);
+    assert(has_metadata() && file_at_ > 0 && download_dir_ != nullptr);
 
-    params.ti = new lt::torrent_info{*info_};
-    params.save_path = download_dir_.get();
-    params.storage_mode = lt::storage_mode_allocate;
     session_.set_alert_mask(lt::alert::status_notification | lt::alert::storage_notification);
-    handle_ = session_.add_torrent(params, ec);
+    params_.save_path = download_dir_.get();
+    params_.storage_mode = lt::storage_mode_allocate;
+    handle_ = session_.add_torrent(params_, ec);
     if (ec)
         return VLC_EGENERIC;
 
@@ -78,6 +123,8 @@ void TorrentAccess::Run()
                 case lt::read_piece_alert::alert_type:
                     HandleReadPiece(a);
                     break;
+                case lt::metadata_received_alert::alert_type: // Magnet file only.
+                    return;
             }
         }
         alerts.clear();
@@ -86,10 +133,11 @@ void TorrentAccess::Run()
 
 void TorrentAccess::SelectPieces(size_t offset)
 {
-    const auto& file = info_->file_at(file_at_ - 1);
-    auto req = info_->map_file(file_at_ - 1, offset, file.size - offset);
-    auto piece_size = info_->piece_length();
-    auto num_pieces = info_->num_pieces();
+    const auto& meta = metadata();
+    const auto& file = meta.file_at(file_at_ - 1);
+    auto req = meta.map_file(file_at_ - 1, offset, file.size - offset);
+    auto piece_size = meta.piece_length();
+    auto num_pieces = meta.num_pieces();
     auto req_pieces = std::ceil((float) req.length / piece_size);
 
     for (auto i = 0; i < num_pieces; ++i) {

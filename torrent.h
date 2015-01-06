@@ -32,11 +32,13 @@
 #include <libtorrent/session.hpp>
 #include <libtorrent/torrent_handle.hpp>
 #include <libtorrent/torrent_info.hpp>
+#include <libtorrent/add_torrent_params.hpp>
 
 #include "thread.h"
 
 namespace lt = libtorrent;
 
+using namespace std::string_literals;
 using unique_cptr = std::unique_ptr<char, void (*)(void*)>;
 
 struct Piece
@@ -70,20 +72,24 @@ class TorrentAccess
             stopped_{false},
             fingerprint_{"VO", LIBTORRENT_VERSION_MAJOR, LIBTORRENT_VERSION_MINOR, 0, 0},
             session_{fingerprint_},
-            download_dir_{nullptr, std::free}
-        {}
+            download_dir_{nullptr, std::free} {
+            uri_ = "torrent://"s + p_access->psz_location;
+        }
         ~TorrentAccess() {
             stopped_ = true;
         }
 
-        static std::unique_ptr<lt::torrent_info> ParseURI(const std::string& uri);
+        static int ParseURI(const std::string& uri, lt::add_torrent_params& params);
+        int RetrieveMetadata();
         int StartDownload();
         Piece ReadNextPiece();
 
         void set_file(int file_at);
         void set_download_dir(unique_cptr dir);
-        void set_info(std::unique_ptr<lt::torrent_info> info);
-        const lt::torrent_info& info() const;
+        void set_parameters(lt::add_torrent_params params);
+        const lt::torrent_info& metadata() const;
+        bool has_metadata() const;
+        const std::string& uri() const;
 
     private:
         void Run();
@@ -91,17 +97,18 @@ class TorrentAccess
         void HandleStateChanged(const lt::alert* alert);
         void HandleReadPiece(const lt::alert* alert);
 
-        access_t*                         access_;
-        int                               file_at_;
-        std::atomic_bool                  stopped_;
-        VLC::JoinableThread               thread_;
-        lt::fingerprint                   fingerprint_;
-        lt::session                       session_;
-        unique_cptr                       download_dir_;
-        PiecesQueue                       queue_;
-        Status                            status_;
-        std::unique_ptr<lt::torrent_info> info_;
-        lt::torrent_handle                handle_;
+        access_t*               access_;
+        int                     file_at_;
+        std::string             uri_;
+        std::atomic_bool        stopped_;
+        VLC::JoinableThread     thread_;
+        lt::fingerprint         fingerprint_;
+        lt::session             session_;
+        unique_cptr             download_dir_;
+        PiecesQueue             queue_;
+        Status                  status_;
+        lt::add_torrent_params  params_;
+        lt::torrent_handle      handle_;
 };
 
 inline void TorrentAccess::set_file(int file_at)
@@ -114,12 +121,22 @@ inline void TorrentAccess::set_download_dir(unique_cptr dir)
     download_dir_ = std::move(dir);
 }
 
-inline void TorrentAccess::set_info(std::unique_ptr<lt::torrent_info> info)
+inline void TorrentAccess::set_parameters(lt::add_torrent_params params)
 {
-    info_ = std::move(info);
+    params_ = std::move(params);
 }
 
-inline const lt::torrent_info& TorrentAccess::info() const
+inline const lt::torrent_info& TorrentAccess::metadata() const
 {
-    return *info_;
+    return *params_.ti;
+}
+
+inline bool TorrentAccess::has_metadata() const
+{
+    return (params_.ti == nullptr) ? false : true;
+}
+
+inline const std::string& TorrentAccess::uri() const
+{
+    return uri_;
 }
