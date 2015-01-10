@@ -85,8 +85,8 @@ class TorrentAccess
         Piece ReadNextPiece();
 
         void set_file(int file_at);
-        void set_download_dir(unique_cptr dir);
-        void set_parameters(lt::add_torrent_params params);
+        void set_download_dir(unique_cptr&& dir);
+        void set_parameters(lt::add_torrent_params&& params);
         const lt::torrent_info& metadata() const;
         bool has_metadata() const;
         const std::string& uri() const;
@@ -116,12 +116,12 @@ inline void TorrentAccess::set_file(int file_at)
     file_at_ = file_at;
 }
 
-inline void TorrentAccess::set_download_dir(unique_cptr dir)
+inline void TorrentAccess::set_download_dir(unique_cptr&& dir)
 {
     download_dir_ = std::move(dir);
 }
 
-inline void TorrentAccess::set_parameters(lt::add_torrent_params params)
+inline void TorrentAccess::set_parameters(lt::add_torrent_params&& params)
 {
     params_ = std::move(params);
 }
