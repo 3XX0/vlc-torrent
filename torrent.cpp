@@ -228,7 +228,7 @@ void TorrentAccess::HandleReadPiece(const lt::alert* alert) // TODO read error
 bool TorrentAccess::ReadNextPiece(Piece& piece)
 {
     std::unique_lock<VLC::Mutex> s_lock{status_.mutex};
-    status_.cond.wait_for(s_lock, 100, [this]{ return status_.state >= lt::torrent_status::downloading; }); // TODO time
+    status_.cond.wait_for(s_lock, 1000, [this]{ return status_.state >= lt::torrent_status::downloading; }); // TODO time
     s_lock.unlock();
 
     std::unique_lock<VLC::Mutex> q_lock{queue_.mutex};
@@ -239,7 +239,7 @@ bool TorrentAccess::ReadNextPiece(Piece& piece)
     handle_.set_piece_deadline(next_piece.id, 0, lt::torrent_handle::alert_when_available);
     msg_Dbg(access_, "Piece requested: %d", next_piece.id);
 
-    queue_.cond.wait_for(q_lock, 100, [&next_piece]{ return next_piece.data != nullptr; }); // TODO time
+    queue_.cond.wait_for(q_lock, 1000, [&next_piece]{ return next_piece.data != nullptr; }); // TODO time
     piece = std::move(next_piece);
     queue_.pieces.pop_front();
 
