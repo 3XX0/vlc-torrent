@@ -35,6 +35,7 @@ static int Open(vlc_object_t*);
 static void Close(vlc_object_t*);
 static int ReadDir(access_t*, input_item_node_t*);
 static int Control(access_t*, int, va_list);
+static int Seek(access_t*, uint64_t);
 static block_t* Block(access_t*);
 
 struct access_sys_t
@@ -106,7 +107,7 @@ static int open(access_t* p_access)
         return VLC_SUCCESS;
     }
     // Torrent file has been browsed, start the download.
-    ACCESS_SET_CALLBACKS(nullptr, Block, Control, nullptr);
+    ACCESS_SET_CALLBACKS(nullptr, Block, Control, Seek);
     torrent.set_file(file_at);
     return torrent.StartDownload();
 }
@@ -168,18 +169,18 @@ static int ReadDir(access_t* p_access, input_item_node_t* p_node)
 static int Control(access_t* p_access, int i_query, va_list args)
 {
     switch(i_query) {
-    case ACCESS_CAN_SEEK:
     case ACCESS_CAN_FASTSEEK:
         *va_arg(args, bool*) = false;
         break;
 
     case ACCESS_CAN_PAUSE:
+    case ACCESS_CAN_SEEK:
     case ACCESS_CAN_CONTROL_PACE:
         *va_arg(args, bool*) = true;
         break;
 
     case ACCESS_GET_PTS_DELAY:
-        *va_arg(args, int64_t *) = DEFAULT_PTS_DELAY * 1000;
+        *va_arg(args, int64_t *) = var_InheritInteger(p_access, "network-caching") * 1000;
         break;
 
     case ACCESS_SET_PAUSE_STATE:
@@ -199,7 +200,21 @@ static int Control(access_t* p_access, int i_query, va_list args)
 
 static block_t* Block(access_t* p_access)
 {
+    Piece p;
+
     auto& torrent = p_access->p_sys->torrent;
-    auto p = torrent.ReadNextPiece();
-    return p.data;
+    auto eof = torrent.ReadNextPiece(p);
+
+    if (eof) {
+        p_access->info.b_eof = true;
+        return nullptr;
+    }
+    return p.data.release();
+}
+
+static int Seek(access_t *p_access, uint64_t i_pos)
+{
+    auto& torrent = p_access->p_sys->torrent;
+    torrent.SelectPieces(i_pos);
+    return VLC_SUCCESS;
 }

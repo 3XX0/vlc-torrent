@@ -40,13 +40,21 @@ namespace lt = libtorrent;
 
 using namespace std::string_literals;
 using unique_cptr = std::unique_ptr<char, void (*)(void*)>;
+using unique_bptr = std::unique_ptr<block_t, void (*)(block_t*)>;
 
 struct Piece
 {
-    int       id;
-    int       offset;
-    int       length;
-    block_t*  data;
+    Piece() : Piece{0, 0, 0} {}
+    Piece(int i, int off, int len) :
+        id{i},
+        offset{off},
+        length{len},
+        data{nullptr, block_Release} {}
+
+    int         id;
+    int         offset;
+    int         length;
+    unique_bptr data;
 };
 
 struct PiecesQueue
@@ -82,7 +90,8 @@ class TorrentAccess
         static int ParseURI(const std::string& uri, lt::add_torrent_params& params);
         int RetrieveMetadata();
         int StartDownload();
-        Piece ReadNextPiece();
+        bool ReadNextPiece(Piece& piece);
+        void SelectPieces(uint64_t offset);
 
         void set_file(int file_at);
         void set_download_dir(unique_cptr&& dir);
@@ -93,7 +102,6 @@ class TorrentAccess
 
     private:
         void Run();
-        void SelectPieces(size_t offset);
         void HandleStateChanged(const lt::alert* alert);
         void HandleReadPiece(const lt::alert* alert);
 

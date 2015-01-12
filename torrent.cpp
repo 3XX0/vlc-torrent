@@ -131,7 +131,7 @@ void TorrentAccess::Run()
     }
 }
 
-void TorrentAccess::SelectPieces(size_t offset)
+void TorrentAccess::SelectPieces(uint64_t offset)
 {
     const auto& meta = metadata();
     const auto& file = meta.file_at(file_at_ - 1);
@@ -139,6 +139,9 @@ void TorrentAccess::SelectPieces(size_t offset)
     auto piece_size = meta.piece_length();
     auto num_pieces = meta.num_pieces();
     auto req_pieces = std::ceil((float) req.length / piece_size);
+
+    std::unique_lock<VLC::Mutex> lock{queue_.mutex};
+    queue_.pieces.clear();
 
     for (auto i = 0; i < num_pieces; ++i) {
         if (i < req.piece || i >= req.piece + req_pieces) {
@@ -158,7 +161,7 @@ void TorrentAccess::SelectPieces(size_t offset)
             len = piece_size;
 
         handle_.piece_priority(i, 7);
-        queue_.pieces.push_back({i, off, len, nullptr});
+        queue_.pieces.push_back({i, off, len});
         req.length -= len;
     }
 }
@@ -212,29 +215,34 @@ void TorrentAccess::HandleReadPiece(const lt::alert* alert) // TODO read error
     auto p = std::find_if(std::begin(queue_.pieces), std::end(queue_.pieces),
       [a](const Piece& p) { return a->piece == p.id; }
     );
-    assert(p != std::end(queue_.pieces) && a->size >= p->length);
+    if (p == std::end(queue_.pieces))
+        return;
 
-    p->data = block_Alloc(p->length);
+    assert(a->size >= p->length);
+    p->data = {block_Alloc(p->length), block_Release};
     std::memcpy(p->data->p_buffer, a->buffer.get() + p->offset, p->length);
     if (p->id == queue_.pieces.front().id)
         queue_.cond.signal();
 }
 
-Piece TorrentAccess::ReadNextPiece()
+bool TorrentAccess::ReadNextPiece(Piece& piece)
 {
     std::unique_lock<VLC::Mutex> s_lock{status_.mutex};
-    status_.cond.wait_for(s_lock, 100, [this]{ return status_.state == lt::torrent_status::downloading; }); // TODO time
+    status_.cond.wait_for(s_lock, 100, [this]{ return status_.state >= lt::torrent_status::downloading; }); // TODO time
     s_lock.unlock();
+
+    std::unique_lock<VLC::Mutex> q_lock{queue_.mutex};
+    if (queue_.pieces.empty())
+        return true; // EOF
 
     auto& next_piece = queue_.pieces.front();
     handle_.set_piece_deadline(next_piece.id, 0, lt::torrent_handle::alert_when_available);
     msg_Dbg(access_, "Piece requested: %d", next_piece.id);
 
-    std::unique_lock<VLC::Mutex> q_lock{queue_.mutex};
     queue_.cond.wait_for(q_lock, 100, [&next_piece]{ return next_piece.data != nullptr; }); // TODO time
-    auto p = std::move(next_piece);
+    piece = std::move(next_piece);
     queue_.pieces.pop_front();
 
-    msg_Dbg(access_, "Got piece: %d", p.id);
-    return p;
+    msg_Dbg(access_, "Got piece: %d", piece.id);
+    return false;
 }
