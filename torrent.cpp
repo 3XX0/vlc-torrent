@@ -138,7 +138,7 @@ void TorrentAccess::SelectPieces(uint64_t offset)
     auto req = meta.map_file(file_at_ - 1, offset, file.size - offset);
     auto piece_size = meta.piece_length();
     auto num_pieces = meta.num_pieces();
-    auto req_pieces = std::ceil((float) req.length / piece_size);
+    auto req_pieces = std::ceil((float) (req.length + req.start) / piece_size);
 
     std::unique_lock<VLC::Mutex> lock{queue_.mutex};
     queue_.pieces.clear();
