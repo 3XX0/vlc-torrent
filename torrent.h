@@ -25,6 +25,7 @@
 #include <memory>
 #include <deque>
 #include <atomic>
+#include <chrono>
 
 #include <vlc_common.h>
 #include <vlc_access.h>
@@ -39,6 +40,7 @@
 namespace lt = libtorrent;
 
 using namespace std::string_literals;
+using namespace std::literals::chrono_literals;
 using unique_cptr = std::unique_ptr<char, void (*)(void*)>;
 using unique_bptr = std::unique_ptr<block_t, void (*)(block_t*)>;
 
@@ -49,11 +51,13 @@ struct Piece
         id{i},
         offset{off},
         length{len},
+        requested{false},
         data{nullptr, block_Release} {}
 
     int         id;
     int         offset;
     int         length;
+    bool        requested;
     unique_bptr data;
 };
 
@@ -90,7 +94,7 @@ class TorrentAccess
         static int ParseURI(const std::string& uri, lt::add_torrent_params& params);
         int RetrieveMetadata();
         int StartDownload();
-        bool ReadNextPiece(Piece& piece);
+        void ReadNextPiece(Piece& piece, bool& eof);
         void SelectPieces(uint64_t offset);
 
         void set_file(int file_at);

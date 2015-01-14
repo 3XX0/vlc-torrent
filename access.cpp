@@ -201,14 +201,14 @@ static int Control(access_t* p_access, int i_query, va_list args)
 static block_t* Block(access_t* p_access)
 {
     Piece p;
+    bool eof;
 
     auto& torrent = p_access->p_sys->torrent;
-    auto eof = torrent.ReadNextPiece(p);
+    torrent.ReadNextPiece(p, eof);
 
-    if (eof) {
-        p_access->info.b_eof = true;
+    p_access->info.b_eof = eof;
+    if (eof || p.data == nullptr)
         return nullptr;
-    }
     return p.data.release();
 }
 

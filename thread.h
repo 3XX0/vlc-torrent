@@ -61,18 +61,29 @@ class CondVar
             vlc_cond_destroy(&cond_);
         }
 
-        template <class Predicate>
-        void wait_for(std::unique_lock<Mutex>& m, mtime_t t, Predicate p) {
-            while (!p())
-                vlc_cond_timedwait(&cond_, &m.mutex()->lock_, t);
-        }
-        void signal() {
+        template <class Predicate, typename Rep, typename Period>
+        bool WaitFor(std::unique_lock<Mutex>& m, std::chrono::duration<Rep, Period> timeout, Predicate pred);
+        void Signal() {
             vlc_cond_signal(&cond_);
         }
 
     private:
-        vlc_cond_t        cond_;
+        vlc_cond_t  cond_;
 };
+
+template <class Predicate, typename Rep, typename Period>
+bool CondVar::WaitFor(std::unique_lock<Mutex>& m, std::chrono::duration<Rep, Period> timeout, Predicate pred)
+{
+    using namespace std::chrono;
+
+    if (pred())
+        return true;
+
+    mtime_t t = duration_cast<microseconds>(timeout).count();
+    if (vlc_cond_timedwait(&cond_, &m.mutex()->lock_, t) == ETIMEDOUT)
+        return false;
+    return pred();
+}
 
 class JoinableThread
 {
