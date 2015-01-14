@@ -1,8 +1,13 @@
 TODO
 ====
 
-* Magnets support
+* ~~Magnets support~~
+* ~~Seek~~
 * Seeding pieces
 * Non-sequential download
-* Seek
 * Fast resume
+* Pause
+* CPU usage improvements
+* Issue pixel strip
+* Magnet direct URI (w/o magnet://)
+* Prefer torrent over magnet link
