@@ -180,7 +180,7 @@ static int Control(access_t* p_access, int i_query, va_list args)
         break;
 
     case ACCESS_GET_PTS_DELAY:
-        *va_arg(args, int64_t *) = var_InheritInteger(p_access, "network-caching") * 1000;
+        *va_arg(args, int64_t *) = DEFAULT_PTS_DELAY * 1000;
         break;
 
     case ACCESS_SET_PAUSE_STATE:
