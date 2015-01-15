@@ -34,13 +34,19 @@
 
 #include "torrent.h"
 
+#include <vlc_url.h>
+
 int TorrentAccess::ParseURI(const std::string& uri, lt::add_torrent_params& params)
 {
     std::string prefix = "magnet:?";
     lt::error_code ec;
 
-    if (!uri.compare(0, prefix.size(), prefix)) {
-        lt::parse_magnet_uri(uri, params, ec);
+    auto pos = uri.find_last_of("/");
+    auto stripped_uri = (pos == std::string::npos) ? uri : uri.substr(pos + 1);
+    stripped_uri = decode_URI_duplicate(stripped_uri.c_str());
+
+    if (!stripped_uri.compare(0, prefix.size(), prefix)) {
+        lt::parse_magnet_uri(stripped_uri, params, ec);
         if (ec)
             return VLC_EGENERIC;
     }
