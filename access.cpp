@@ -49,7 +49,7 @@ struct access_sys_t
 
 vlc_module_begin()
 
-    set_shortname(N_("Torrent file and Magnet link"))
+    set_shortname(N_("Torrent / Magnet"))
     set_description(N_("Torrent file and Magnet link"))
     set_capability("access", 51)
     set_category(CAT_INPUT)
@@ -60,7 +60,7 @@ vlc_module_begin()
     add_integer("file_at", nullptr, nullptr, nullptr, false)
     change_private()
 
-    add_string("download_dir", nullptr, "Download directory",
+    add_directory("download_dir", nullptr, "Download directory",
       "Directory used to store dowloaded files", false)
 
 vlc_module_end()
