@@ -91,7 +91,7 @@ int TorrentAccess::StartDownload()
 
     assert(has_metadata() && file_at_ > 0 && download_dir_ != nullptr);
 
-    session_.set_alert_mask(lt::alert::status_notification | lt::alert::storage_notification);
+    session_.set_alert_mask(lt::alert::status_notification | lt::alert::storage_notification | lt::alert::progress_notification);
     params_.save_path = download_dir_.get();
     params_.storage_mode = lt::storage_mode_allocate;
     handle_ = session_.add_torrent(params_, ec);
@@ -115,13 +115,18 @@ void TorrentAccess::Run()
             continue;
 
         session_.pop_alerts(&alerts);
-        for (const auto a : alerts) {
-            switch (a->type()) {
+        for (const auto alert : alerts) {
+            switch (alert->type()) {
+                case lt::piece_finished_alert::alert_type: {
+                    const auto a = lt::alert_cast<lt::piece_finished_alert>(alert);
+                    msg_Dbg(access_, "Piece finished: %d", a->piece_index);
+                    break;
+                }
                 case lt::state_changed_alert::alert_type:
-                    HandleStateChanged(a);
+                    HandleStateChanged(alert);
                     break;
                 case lt::read_piece_alert::alert_type:
-                    HandleReadPiece(a);
+                    HandleReadPiece(alert);
                     break;
                 case lt::metadata_received_alert::alert_type: // Magnet file only.
                     return;
