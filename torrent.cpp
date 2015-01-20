@@ -211,9 +211,14 @@ void TorrentAccess::HandleStateChanged(const lt::alert* alert)
     status_.cond.Signal();
 }
 
-void TorrentAccess::HandleReadPiece(const lt::alert* alert) // TODO read error
+void TorrentAccess::HandleReadPiece(const lt::alert* alert)
 {
     const auto a = lt::alert_cast<lt::read_piece_alert>(alert);
+
+    if (a->buffer == nullptr) { // Read error, try again.
+        handle_.read_piece(a->piece);
+        return;
+    }
 
     std::unique_lock<VLC::Mutex> lock{queue_.mutex};
 
