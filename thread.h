@@ -105,8 +105,9 @@ class JoinableThread
 template <class Functor>
 int JoinableThread::Start(access_t* access, const Functor& func)
 {
-    static auto trampoline = func;
+    static std::function<void()> trampoline;
 
+    trampoline = func;
     auto f = [](void*) -> void* {
         trampoline();
         return nullptr;
