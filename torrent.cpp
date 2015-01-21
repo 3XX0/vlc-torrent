@@ -61,7 +61,6 @@ int TorrentAccess::RetrieveMetadata()
     session_.set_alert_mask(lt::alert::status_notification);
     session_.add_extension(&lt::create_metadata_plugin);
     session_.add_extension(&lt::create_ut_metadata_plugin);
-    params_.url = access_->psz_location;
     handle_ = session_.add_torrent(params_, ec);
     if (ec)
         return VLC_EGENERIC;
@@ -85,11 +84,11 @@ int TorrentAccess::RetrieveMetadata()
     return VLC_SUCCESS;
 }
 
-int TorrentAccess::StartDownload()
+int TorrentAccess::StartDownload(int file_at)
 {
     lt::error_code ec;
 
-    assert(has_metadata() && file_at_ > 0 && download_dir_ != nullptr);
+    assert(has_metadata() && file_at > 0 && download_dir_ != nullptr);
 
     session_.set_alert_mask(lt::alert::status_notification | lt::alert::storage_notification | lt::alert::progress_notification);
     params_.save_path = download_dir_.get();
@@ -98,6 +97,7 @@ int TorrentAccess::StartDownload()
     if (ec)
         return VLC_EGENERIC;
 
+    file_at_ = file_at;
     SelectPieces(0);
     handle_.set_sequential_download(true);
     status_.state = handle_.status().state;
@@ -138,6 +138,8 @@ void TorrentAccess::Run()
 
 void TorrentAccess::SelectPieces(uint64_t offset)
 {
+    assert(has_metadata() && file_at_ > 0);
+
     const auto& meta = metadata();
     const auto& file = meta.file_at(file_at_ - 1);
     auto req = meta.map_file(file_at_ - 1, offset, file.size - offset);

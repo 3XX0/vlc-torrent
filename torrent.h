@@ -93,11 +93,10 @@ class TorrentAccess
 
         static int ParseURI(const std::string& uri, lt::add_torrent_params& params);
         int RetrieveMetadata();
-        int StartDownload();
+        int StartDownload(int file_at);
         void ReadNextPiece(Piece& piece, bool& eof);
         void SelectPieces(uint64_t offset);
 
-        void set_file(int file_at);
         void set_download_dir(unique_cptr&& dir);
         void set_parameters(lt::add_torrent_params&& params);
         const lt::torrent_info& metadata() const;
@@ -122,11 +121,6 @@ class TorrentAccess
         lt::add_torrent_params  params_;
         lt::torrent_handle      handle_;
 };
-
-inline void TorrentAccess::set_file(int file_at)
-{
-    file_at_ = file_at;
-}
 
 inline void TorrentAccess::set_download_dir(unique_cptr&& dir)
 {

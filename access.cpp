@@ -108,8 +108,7 @@ static int open(access_t* p_access)
     }
     // Torrent file has been browsed, start the download.
     ACCESS_SET_CALLBACKS(nullptr, Block, Control, Seek);
-    torrent.set_file(file_at);
-    return torrent.StartDownload();
+    return torrent.StartDownload(file_at);
 }
 
 static int Open(vlc_object_t* p_this)
