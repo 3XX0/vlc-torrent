@@ -58,7 +58,7 @@ int TorrentAccess::RetrieveMetadata()
 
     assert(download_dir_ != nullptr);
 
-    session_.set_alert_mask(lt::alert::status_notification);
+    session_.set_alert_mask(lta::status_notification);
     session_.add_extension(&lt::create_metadata_plugin);
     session_.add_extension(&lt::create_ut_metadata_plugin);
     handle_ = session_.add_torrent(params_, ec);
@@ -90,7 +90,7 @@ int TorrentAccess::StartDownload(int file_at)
 
     assert(has_metadata() && file_at > 0 && download_dir_ != nullptr);
 
-    session_.set_alert_mask(lt::alert::status_notification | lt::alert::storage_notification | lt::alert::progress_notification);
+    session_.set_alert_mask(lta::status_notification | lta::storage_notification | lta::progress_notification);
     params_.save_path = download_dir_.get();
     params_.storage_mode = lt::storage_mode_allocate;
     handle_ = session_.add_torrent(params_, ec);
@@ -111,7 +111,7 @@ void TorrentAccess::Run()
     std::deque<lt::alert*> alerts;
 
     while (!stopped_) {
-        if (!session_.wait_for_alert(lt::microsec(500)))
+        if (!session_.wait_for_alert(lt::seconds(1)))
             continue;
 
         session_.pop_alerts(&alerts);
@@ -179,28 +179,28 @@ void TorrentAccess::HandleStateChanged(const lt::alert* alert)
     const char* msg;
 
     switch (a->state) {
-        case lt::torrent_status::queued_for_checking:
+        case lts::queued_for_checking:
             msg = "Queued for checking";
             break;
-        case lt::torrent_status::downloading_metadata:
+        case lts::downloading_metadata:
             msg = "Downloading metadata";
             break;
-        case lt::torrent_status::finished:
+        case lts::finished:
             msg = "Finished";
             break;
-        case lt::torrent_status::allocating:
+        case lts::allocating:
             msg = "Allocating space";
             break;
-        case lt::torrent_status::checking_resume_data:
+        case lts::checking_resume_data:
             msg = "Resuming";
             break;
-        case lt::torrent_status::checking_files:
+        case lts::checking_files:
             msg = "Checking files";
             break;
-        case lt::torrent_status::seeding:
+        case lts::seeding:
             msg = "Seeding";
             break;
-        case lt::torrent_status::downloading:
+        case lts::downloading:
             msg = "Downloading";
             break;
         default:
@@ -242,7 +242,7 @@ void TorrentAccess::ReadNextPiece(Piece& piece, bool& eof)
     eof = false;
 
     std::unique_lock<VLC::Mutex> s_lock{status_.mutex};
-    if (!status_.cond.WaitFor(s_lock, 500ms, [this]{ return status_.state >= lt::torrent_status::downloading; }))
+    if (!status_.cond.WaitFor(s_lock, 500ms, [this]{ return status_.state == lts::downloading || lts::finished || lts::seeding;}))
         return;
     s_lock.unlock();
 

@@ -79,7 +79,7 @@ bool CondVar::WaitFor(std::unique_lock<Mutex>& m, std::chrono::duration<Rep, Per
     if (pred())
         return true;
 
-    mtime_t t = duration_cast<microseconds>(timeout).count();
+    mtime_t t = mdate() + duration_cast<microseconds>(timeout).count();
     if (vlc_cond_timedwait(&cond_, &m.mutex()->lock_, t) == ETIMEDOUT)
         return false;
     return pred();

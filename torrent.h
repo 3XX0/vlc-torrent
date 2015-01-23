@@ -38,9 +38,11 @@
 #include "thread.h"
 
 namespace lt = libtorrent;
-
 using namespace std::string_literals;
 using namespace std::literals::chrono_literals;
+
+using lta = lt::alert;
+using lts = lt::torrent_status;
 using unique_cptr = std::unique_ptr<char, void (*)(void*)>;
 using unique_bptr = std::unique_ptr<block_t, void (*)(block_t*)>;
 
@@ -70,9 +72,9 @@ struct PiecesQueue
 
 struct Status
 {
-    VLC::Mutex                  mutex;
-    VLC::CondVar                cond;
-    lt::torrent_status::state_t state;
+    VLC::Mutex    mutex;
+    VLC::CondVar  cond;
+    lts::state_t  state;
 };
 
 class TorrentAccess
