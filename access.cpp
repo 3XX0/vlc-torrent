@@ -69,7 +69,7 @@ vlc_module_end()
  * Open:
  *****************************************************************************/
 
-static unique_cptr var_GetDownloadDir(const access_t* p_access)
+static unique_char_ptr var_GetDownloadDir(const access_t* p_access)
 {
     auto dir = var_InheritString(p_access, "download_dir");
     if (dir == nullptr)

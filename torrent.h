@@ -43,8 +43,8 @@ using namespace std::literals::chrono_literals;
 
 using lta = lt::alert;
 using lts = lt::torrent_status;
-using unique_cptr = std::unique_ptr<char, void (*)(void*)>;
-using unique_bptr = std::unique_ptr<block_t, void (*)(block_t*)>;
+using unique_char_ptr = std::unique_ptr<char, void (*)(void*)>;
+using unique_block_ptr = std::unique_ptr<block_t, void (*)(block_t*)>;
 
 struct Piece
 {
@@ -56,11 +56,11 @@ struct Piece
         requested{false},
         data{nullptr, block_Release} {}
 
-    int         id;
-    int         offset;
-    int         length;
-    bool        requested;
-    unique_bptr data;
+    int              id;
+    int              offset;
+    int              length;
+    bool             requested;
+    unique_block_ptr data;
 };
 
 struct PiecesQueue
@@ -99,7 +99,7 @@ class TorrentAccess
         void ReadNextPiece(Piece& piece, bool& eof);
         void SelectPieces(uint64_t offset);
 
-        void set_download_dir(unique_cptr&& dir);
+        void set_download_dir(unique_char_ptr&& dir);
         void set_parameters(lt::add_torrent_params&& params);
         const lt::torrent_info& metadata() const;
         bool has_metadata() const;
@@ -117,14 +117,14 @@ class TorrentAccess
         VLC::JoinableThread     thread_;
         lt::fingerprint         fingerprint_;
         lt::session             session_;
-        unique_cptr             download_dir_;
+        unique_char_ptr         download_dir_;
         PiecesQueue             queue_;
         Status                  status_;
         lt::add_torrent_params  params_;
         lt::torrent_handle      handle_;
 };
 
-inline void TorrentAccess::set_download_dir(unique_cptr&& dir)
+inline void TorrentAccess::set_download_dir(unique_char_ptr&& dir)
 {
     download_dir_ = std::move(dir);
 }
