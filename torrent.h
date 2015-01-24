@@ -1,5 +1,5 @@
 /*****************************************************************************
- * Copyright (C) 2014 Videolan Team
+ * Copyright (C) 2014 VLC authors, VideoLAN and Videolabs
  *
  * Authors: Jonathan Calmels <exxo@videolabs.io>
  *
