@@ -25,6 +25,10 @@
 #include <atomic>
 #include <chrono>
 
+#ifdef HAVE_CONFIG_H
+# include "config.h"
+#endif
+
 #include <vlc_common.h>
 #include <vlc_access.h>
 
@@ -82,7 +86,8 @@ class TorrentAccess
             access_{p_access},
             file_at_{-1},
             stopped_{false},
-            fingerprint_{"VO", LIBTORRENT_VERSION_MAJOR, LIBTORRENT_VERSION_MINOR, 0, 0},
+            fingerprint_{"VL", PACKAGE_VERSION_MAJOR, PACKAGE_VERSION_MINOR,
+                               PACKAGE_VERSION_REVISION, PACKAGE_VERSION_EXTRA},
             session_{fingerprint_},
             download_dir_{nullptr, std::free} {
             uri_ = "torrent://"s + p_access->psz_location;
