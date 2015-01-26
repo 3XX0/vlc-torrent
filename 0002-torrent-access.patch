@@ -1,63 +1,27 @@
-From 189de6efb2415e77c1fd7109f76caa84b419cfd0 Mon Sep 17 00:00:00 2001
+From dd9ea89ebff5872c93035b638e72a9cff6c7f958 Mon Sep 17 00:00:00 2001
 From: Jonathan Calmels <jbjcalmels@gmail.com>
-Date: Wed, 14 Jan 2015 19:59:10 +0100
-Subject: [PATCH] torrent
+Date: Mon, 26 Jan 2015 19:38:50 +0100
+Subject: [PATCH 2/2] torrent access
 
 ---
- configure.ac                       |   5 +
- modules/access/Makefile.am         |   7 +
- modules/access/torrent/access.cpp  | 220 ++++++++++++++++++++++++++++++++
- modules/access/torrent/thread.h    | 121 ++++++++++++++++++
- modules/access/torrent/torrent.cpp | 255 +++++++++++++++++++++++++++++++++++++
- modules/access/torrent/torrent.h   | 154 ++++++++++++++++++++++
- 6 files changed, 762 insertions(+)
+ modules/access/torrent/access.cpp  | 219 +++++++++++++++++++++++++++++
+ modules/access/torrent/thread.h    | 118 ++++++++++++++++
+ modules/access/torrent/torrent.cpp | 275 +++++++++++++++++++++++++++++++++++++
+ modules/access/torrent/torrent.h   | 153 +++++++++++++++++++++
+ 4 files changed, 765 insertions(+)
  create mode 100644 modules/access/torrent/access.cpp
  create mode 100644 modules/access/torrent/thread.h
  create mode 100644 modules/access/torrent/torrent.cpp
  create mode 100644 modules/access/torrent/torrent.h
 
-diff --git a/configure.ac b/configure.ac
-index 2b2a815..78c23af 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -1589,6 +1589,11 @@ dnl
- PKG_ENABLE_MODULES_VLC([ARCHIVE], [access_archive], [libarchive >= 2.8.5], (libarchive support), [auto])
- 
- dnl
-+dnl libtorrent
-+dnl
-+PKG_ENABLE_MODULES_VLC([TORRENT], [access_torrent], [libtorrent-rasterbar], (libtorrent support), [auto])
-+
-+dnl
- dnl  live555 input
- dnl
- AC_ARG_ENABLE(live555,
-diff --git a/modules/access/Makefile.am b/modules/access/Makefile.am
-index f0ad4f4..d2e4a49 100644
---- a/modules/access/Makefile.am
-+++ b/modules/access/Makefile.am
-@@ -30,6 +30,13 @@ access_LTLIBRARIES += libfilesystem_plugin.la
- libidummy_plugin_la_SOURCES = access/idummy.c
- access_LTLIBRARIES += libidummy_plugin.la
- 
-+libaccess_torrent_plugin_la_SOURCES = access/torrent/access.cpp access/torrent/torrent.cpp
-+libaccess_torrent_plugin_la_CXXFLAGS = $(AM_CXXFLAGS) "-std=c++14" $(TORRENT_CFLAGS)
-+libaccess_torrent_plugin_la_LIBADD = $(AM_LIBADD) $(TORRENT_LIBS)
-+libaccess_torrent_plugin_la_LDFLAGS = $(AM_LDFLAGS) -rpath '$(accessdir)'
-+access_LTLIBRARIES += $(LTLIBaccess_torrent)
-+EXTRA_LTLIBRARIES += libaccess_torrent_plugin.la
-+
- libimem_plugin_la_SOURCES = access/imem.c
- libimem_plugin_la_LIBADD = $(LIBM)
- access_LTLIBRARIES += libimem_plugin.la
 diff --git a/modules/access/torrent/access.cpp b/modules/access/torrent/access.cpp
 new file mode 100644
-index 0000000..f7c60a5
+index 0000000..71ee380
 --- /dev/null
 +++ b/modules/access/torrent/access.cpp
-@@ -0,0 +1,220 @@
+@@ -0,0 +1,219 @@
 +/*****************************************************************************
-+ * Copyright (C) 2014 Videolan Team
++ * Copyright (C) 2014 VLC authors, VideoLAN and Videolabs
 + *
 + * Authors: Jonathan Calmels <exxo@videolabs.io>
 + *
@@ -107,7 +71,7 @@ index 0000000..f7c60a5
 +
 +vlc_module_begin()
 +
-+    set_shortname(N_("Torrent file and Magnet link"))
++    set_shortname(N_("Torrent / Magnet"))
 +    set_description(N_("Torrent file and Magnet link"))
 +    set_capability("access", 51)
 +    set_category(CAT_INPUT)
@@ -115,10 +79,10 @@ index 0000000..f7c60a5
 +    add_shortcut("torrent", "file", "magnet")
 +    set_callbacks(Open, Close)
 +
-+    add_integer("file_at", nullptr, nullptr, nullptr, false)
++    add_integer("file_at", -1, nullptr, nullptr, false)
 +    change_private()
 +
-+    add_string("download_dir", nullptr, "Download directory",
++    add_directory("download_dir", nullptr, "Download directory",
 +      "Directory used to store dowloaded files", false)
 +
 +vlc_module_end()
@@ -127,7 +91,7 @@ index 0000000..f7c60a5
 + * Open:
 + *****************************************************************************/
 +
-+static unique_cptr var_GetDownloadDir(const access_t* p_access)
++static unique_char_ptr var_GetDownloadDir(const access_t* p_access)
 +{
 +    auto dir = var_InheritString(p_access, "download_dir");
 +    if (dir == nullptr)
@@ -158,7 +122,7 @@ index 0000000..f7c60a5
 +        if (torrent.RetrieveMetadata() != VLC_SUCCESS)
 +            return VLC_EGENERIC;
 +    }
-+    if (file_at == 0) {
++    if (file_at < 0) {
 +        // Browse the torrent metadata and generate a playlist with the files in it.
 +        ACCESS_SET_CALLBACKS(nullptr, nullptr, Control, nullptr);
 +        p_access->pf_readdir = ReadDir;
@@ -166,8 +130,7 @@ index 0000000..f7c60a5
 +    }
 +    // Torrent file has been browsed, start the download.
 +    ACCESS_SET_CALLBACKS(nullptr, Block, Control, Seek);
-+    torrent.set_file(file_at);
-+    return torrent.StartDownload();
++    return torrent.StartDownload(file_at);
 +}
 +
 +static int Open(vlc_object_t* p_this)
@@ -206,9 +169,7 @@ index 0000000..f7c60a5
 +    const auto& torrent = p_access->p_sys->torrent;
 +    const auto& metadata = torrent.metadata();
 +
-+    msg_Info(p_access, "Browsing torrent file '%s'", metadata.name().c_str());
-+
-+    auto i = 1;
++    auto i = 0;
 +    for (auto f = metadata.begin_files(); f != metadata.end_files(); ++f, ++i) {
 +        const auto psz_uri = torrent.uri().c_str();
 +        const auto psz_name = f->filename();
@@ -218,8 +179,6 @@ index 0000000..f7c60a5
 +        input_item_AddOption(p_item, psz_option.c_str(), VLC_INPUT_OPTION_TRUSTED);
 +        input_item_node_AppendItem(p_node, p_item);
 +        input_item_Release(p_item);
-+
-+        msg_Info(p_access, "Adding '%s'", psz_name.c_str());
 +    }
 +    return VLC_SUCCESS;
 +}
@@ -238,13 +197,15 @@ index 0000000..f7c60a5
 +        break;
 +
 +    case ACCESS_GET_PTS_DELAY:
-+        *va_arg(args, int64_t *) = DEFAULT_PTS_DELAY * 1000;
++        *va_arg(args, int64_t*) = DEFAULT_PTS_DELAY * 1000;
 +        break;
 +
 +    case ACCESS_SET_PAUSE_STATE:
++    case ACCESS_SET_SEEKPOINT:
++        return VLC_SUCCESS;
++
 +    case ACCESS_GET_TITLE_INFO:
 +    case ACCESS_SET_TITLE:
-+    case ACCESS_SET_SEEKPOINT:
 +    case ACCESS_SET_PRIVATE_ID_STATE:
 +        return VLC_EGENERIC;
 +
@@ -267,6 +228,7 @@ index 0000000..f7c60a5
 +    p_access->info.b_eof = eof;
 +    if (eof || p.data == nullptr)
 +        return nullptr;
++    p_access->info.i_pos += p.length;
 +    return p.data.release();
 +}
 +
@@ -274,16 +236,17 @@ index 0000000..f7c60a5
 +{
 +    auto& torrent = p_access->p_sys->torrent;
 +    torrent.SelectPieces(i_pos);
++    p_access->info.i_pos += i_pos;
 +    return VLC_SUCCESS;
 +}
 diff --git a/modules/access/torrent/thread.h b/modules/access/torrent/thread.h
 new file mode 100644
-index 0000000..c913be2
+index 0000000..95865bb
 --- /dev/null
 +++ b/modules/access/torrent/thread.h
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,118 @@
 +/*****************************************************************************
-+ * Copyright (C) 2014 Videolan Team
++ * Copyright (C) 2014 VLC authors, VideoLAN and Videolabs
 + *
 + * Authors: Jonathan Calmels <exxo@videolabs.io>
 + *
@@ -301,8 +264,6 @@ index 0000000..c913be2
 + * along with this program; if not, write to the Free Software Foundation,
 + * Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
 + *****************************************************************************/
-+
-+#pragma once
 +
 +#include <mutex>
 +#include <functional>
@@ -360,13 +321,11 @@ index 0000000..c913be2
 +{
 +    using namespace std::chrono;
 +
-+    if (pred())
-+        return true;
-+
-+    mtime_t t = duration_cast<microseconds>(timeout).count();
-+    if (vlc_cond_timedwait(&cond_, &m.mutex()->lock_, t) == ETIMEDOUT)
-+        return false;
-+    return pred();
++    auto t = mdate() + duration_cast<microseconds>(timeout).count();
++    while (!pred())
++        if (vlc_cond_timedwait(&cond_, &m.mutex()->lock_, t) == ETIMEDOUT)
++            return pred();
++    return true;
 +}
 +
 +class JoinableThread
@@ -389,8 +348,9 @@ index 0000000..c913be2
 +template <class Functor>
 +int JoinableThread::Start(access_t* access, const Functor& func)
 +{
-+    static auto trampoline = func;
++    static std::function<void()> trampoline;
 +
++    trampoline = func;
 +    auto f = [](void*) -> void* {
 +        trampoline();
 +        return nullptr;
@@ -405,12 +365,12 @@ index 0000000..c913be2
 +}
 diff --git a/modules/access/torrent/torrent.cpp b/modules/access/torrent/torrent.cpp
 new file mode 100644
-index 0000000..33a9aa6
+index 0000000..33316bd0
 --- /dev/null
 +++ b/modules/access/torrent/torrent.cpp
-@@ -0,0 +1,255 @@
+@@ -0,0 +1,275 @@
 +/*****************************************************************************
-+ * Copyright (C) 2014 Videolan Team
++ * Copyright (C) 2014 VLC authors, VideoLAN and Videolabs
 + *
 + * Authors: Jonathan Calmels <exxo@videolabs.io>
 + *
@@ -436,6 +396,9 @@ index 0000000..33a9aa6
 +#include <functional>
 +#include <fstream>
 +
++#include <vlc_common.h>
++#include <vlc_url.h>
++
 +#include <libtorrent/alert_types.hpp>
 +#include <libtorrent/create_torrent.hpp>
 +#include <libtorrent/extensions/metadata_transfer.hpp>
@@ -447,16 +410,18 @@ index 0000000..33a9aa6
 +
 +int TorrentAccess::ParseURI(const std::string& uri, lt::add_torrent_params& params)
 +{
-+    std::string prefix = "magnet:?";
 +    lt::error_code ec;
 +
-+    if (!uri.compare(0, prefix.size(), prefix)) {
-+        lt::parse_magnet_uri(uri, params, ec);
++    const auto prefix = "magnet:?"s;
++    const auto uri_decoded = std::string{decode_URI_duplicate(uri.c_str())};
++
++    if (!uri_decoded.compare(0, prefix.size(), prefix)) {
++        lt::parse_magnet_uri(uri_decoded, params, ec);
 +        if (ec)
 +            return VLC_EGENERIC;
 +    }
 +    else {
-+        params.ti = new lt::torrent_info{uri, ec};
++        params.ti = new lt::torrent_info{uri_decoded, ec};
 +        if (ec)
 +            return VLC_EGENERIC;
 +    }
@@ -469,10 +434,9 @@ index 0000000..33a9aa6
 +
 +    assert(download_dir_ != nullptr);
 +
-+    session_.set_alert_mask(lt::alert::status_notification);
++    session_.set_alert_mask(lta::status_notification);
 +    session_.add_extension(&lt::create_metadata_plugin);
 +    session_.add_extension(&lt::create_ut_metadata_plugin);
-+    params_.url = access_->psz_location;
 +    handle_ = session_.add_torrent(params_, ec);
 +    if (ec)
 +        return VLC_EGENERIC;
@@ -484,36 +448,36 @@ index 0000000..33a9aa6
 +    params_.ti = new lt::torrent_info{metadata};
 +
 +    // Create the torrent file.
-+    auto torrent = lt::create_torrent{metadata};
-+    auto path = download_dir_.get() + "/"s + metadata.name() + ".torrent";
++    const auto torrent = lt::create_torrent{metadata};
++    const auto path = download_dir_.get() + "/"s + metadata.name() + ".torrent";
 +    std::ofstream file{path, std::ios_base::binary};
 +    if (!file.is_open())
 +        return VLC_EGENERIC;
 +    lt::bencode(std::ostream_iterator<char>{file}, torrent.generate());
 +    uri_ = "torrent://" + path; // Change the initial URI to point to the torrent generated.
 +
-+    msg_Info(access_, "Metadata successfully retrieved, torrent file created");
 +    return VLC_SUCCESS;
 +}
 +
-+int TorrentAccess::StartDownload()
++int TorrentAccess::StartDownload(int file_at)
 +{
 +    lt::error_code ec;
 +
-+    assert(has_metadata() && file_at_ > 0 && download_dir_ != nullptr);
++    assert(has_metadata() && file_at >= 0 && download_dir_ != nullptr);
 +
-+    session_.set_alert_mask(lt::alert::status_notification | lt::alert::storage_notification);
++    session_.set_alert_mask(lta::status_notification | lta::storage_notification | lta::progress_notification);
 +    params_.save_path = download_dir_.get();
 +    params_.storage_mode = lt::storage_mode_allocate;
 +    handle_ = session_.add_torrent(params_, ec);
 +    if (ec)
 +        return VLC_EGENERIC;
 +
++    file_at_ = file_at;
 +    SelectPieces(0);
 +    handle_.set_sequential_download(true);
 +    status_.state = handle_.status().state;
 +
-+    auto run = std::bind(std::mem_fn(&TorrentAccess::Run), this);
++    const auto run = std::bind(std::mem_fn(&TorrentAccess::Run), this);
 +    return thread_.Start(access_, run);
 +}
 +
@@ -522,17 +486,22 @@ index 0000000..33a9aa6
 +    std::deque<lt::alert*> alerts;
 +
 +    while (!stopped_) {
-+        if (!session_.wait_for_alert(lt::microsec(500)))
++        if (!session_.wait_for_alert(lt::seconds(1)))
 +            continue;
 +
 +        session_.pop_alerts(&alerts);
-+        for (const auto a : alerts) {
-+            switch (a->type()) {
++        for (const auto alert : alerts) {
++            switch (alert->type()) {
++                case lt::piece_finished_alert::alert_type: {
++                    const auto a = lt::alert_cast<lt::piece_finished_alert>(alert);
++                    msg_Dbg(access_, "Piece finished: %d", a->piece_index);
++                    break;
++                }
 +                case lt::state_changed_alert::alert_type:
-+                    HandleStateChanged(a);
++                    HandleStateChanged(alert);
 +                    break;
 +                case lt::read_piece_alert::alert_type:
-+                    HandleReadPiece(a);
++                    HandleReadPiece(alert);
 +                    break;
 +                case lt::metadata_received_alert::alert_type: // Magnet file only.
 +                    return;
@@ -544,14 +513,16 @@ index 0000000..33a9aa6
 +
 +void TorrentAccess::SelectPieces(uint64_t offset)
 +{
-+    const auto& meta = metadata();
-+    const auto& file = meta.file_at(file_at_ - 1);
-+    auto req = meta.map_file(file_at_ - 1, offset, file.size - offset);
-+    auto piece_size = meta.piece_length();
-+    auto num_pieces = meta.num_pieces();
-+    auto req_pieces = std::ceil((float) (req.length + req.start) / piece_size);
++    assert(has_metadata() && file_at_ >= 0);
 +
-+    std::unique_lock<VLC::Mutex> lock{queue_.mutex};
++    const auto& meta = metadata();
++    const auto& file = meta.file_at(file_at_);
++    auto req = meta.map_file(file_at_, offset, file.size - offset);
++    const auto piece_size = meta.piece_length();
++    const auto num_pieces = meta.num_pieces();
++    const auto req_pieces = std::ceil((float) (req.length + req.start) / piece_size);
++
++    auto lock = std::unique_lock<VLC::Mutex>{queue_.mutex};
 +    queue_.pieces.clear();
 +
 +    for (auto i = 0; i < num_pieces; ++i) {
@@ -583,28 +554,28 @@ index 0000000..33a9aa6
 +    const char* msg;
 +
 +    switch (a->state) {
-+        case lt::torrent_status::queued_for_checking:
++        case lts::queued_for_checking:
 +            msg = "Queued for checking";
 +            break;
-+        case lt::torrent_status::downloading_metadata:
++        case lts::downloading_metadata:
 +            msg = "Downloading metadata";
 +            break;
-+        case lt::torrent_status::finished:
++        case lts::finished:
 +            msg = "Finished";
 +            break;
-+        case lt::torrent_status::allocating:
++        case lts::allocating:
 +            msg = "Allocating space";
 +            break;
-+        case lt::torrent_status::checking_resume_data:
++        case lts::checking_resume_data:
 +            msg = "Resuming";
 +            break;
-+        case lt::torrent_status::checking_files:
++        case lts::checking_files:
 +            msg = "Checking files";
 +            break;
-+        case lt::torrent_status::seeding:
++        case lts::seeding:
 +            msg = "Seeding";
 +            break;
-+        case lt::torrent_status::downloading:
++        case lts::downloading:
 +            msg = "Downloading";
 +            break;
 +        default:
@@ -612,16 +583,21 @@ index 0000000..33a9aa6
 +    }
 +    msg_Info(access_, "State changed to: %s", msg);
 +
-+    std::unique_lock<VLC::Mutex> lock{status_.mutex};
++    auto lock = std::unique_lock<VLC::Mutex>{status_.mutex};
 +    status_.state = a->state;
 +    status_.cond.Signal();
 +}
 +
-+void TorrentAccess::HandleReadPiece(const lt::alert* alert) // TODO read error
++void TorrentAccess::HandleReadPiece(const lt::alert* alert)
 +{
 +    const auto a = lt::alert_cast<lt::read_piece_alert>(alert);
 +
-+    std::unique_lock<VLC::Mutex> lock{queue_.mutex};
++    if (a->buffer == nullptr) { // Read error, try again.
++        handle_.read_piece(a->piece);
++        return;
++    }
++
++    auto lock = std::unique_lock<VLC::Mutex>{queue_.mutex};
 +
 +    auto p = std::find_if(std::begin(queue_.pieces), std::end(queue_.pieces),
 +      [a](const Piece& p) { return a->piece == p.id; }
@@ -640,12 +616,16 @@ index 0000000..33a9aa6
 +{
 +    eof = false;
 +
-+    std::unique_lock<VLC::Mutex> s_lock{status_.mutex};
-+    if (!status_.cond.WaitFor(s_lock, 500ms, [this]{ return status_.state >= lt::torrent_status::downloading; }))
++    auto s_lock = std::unique_lock<VLC::Mutex>{status_.mutex};
++    auto cond = status_.cond.WaitFor(s_lock, 500ms, [s = status_.state]{
++      return s == lts::downloading || s == lts::finished || s == lts::seeding;
++    });
++    if (!cond)
 +        return;
++
 +    s_lock.unlock();
 +
-+    std::unique_lock<VLC::Mutex> q_lock{queue_.mutex};
++    auto q_lock = std::unique_lock<VLC::Mutex>{queue_.mutex};
 +    if (queue_.pieces.empty()) {
 +        eof = true;
 +        return;
@@ -666,12 +646,12 @@ index 0000000..33a9aa6
 +}
 diff --git a/modules/access/torrent/torrent.h b/modules/access/torrent/torrent.h
 new file mode 100644
-index 0000000..fa9b73f
+index 0000000..5dd5e0a
 --- /dev/null
 +++ b/modules/access/torrent/torrent.h
-@@ -0,0 +1,154 @@
+@@ -0,0 +1,153 @@
 +/*****************************************************************************
-+ * Copyright (C) 2014 Videolan Team
++ * Copyright (C) 2014 VLC authors, VideoLAN and Videolabs
 + *
 + * Authors: Jonathan Calmels <exxo@videolabs.io>
 + *
@@ -690,14 +670,16 @@ index 0000000..fa9b73f
 + * Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
 + *****************************************************************************/
 +
-+#pragma once
-+
 +#include <string>
 +#include <cstdlib>
 +#include <memory>
 +#include <deque>
 +#include <atomic>
 +#include <chrono>
++
++#ifdef HAVE_CONFIG_H
++# include "config.h"
++#endif
 +
 +#include <vlc_common.h>
 +#include <vlc_access.h>
@@ -710,11 +692,13 @@ index 0000000..fa9b73f
 +#include "thread.h"
 +
 +namespace lt = libtorrent;
-+
 +using namespace std::string_literals;
 +using namespace std::literals::chrono_literals;
-+using unique_cptr = std::unique_ptr<char, void (*)(void*)>;
-+using unique_bptr = std::unique_ptr<block_t, void (*)(block_t*)>;
++
++using lta = lt::alert;
++using lts = lt::torrent_status;
++using unique_char_ptr = std::unique_ptr<char, void (*)(void*)>;
++using unique_block_ptr = std::unique_ptr<block_t, void (*)(block_t*)>;
 +
 +struct Piece
 +{
@@ -726,11 +710,11 @@ index 0000000..fa9b73f
 +        requested{false},
 +        data{nullptr, block_Release} {}
 +
-+    int         id;
-+    int         offset;
-+    int         length;
-+    bool        requested;
-+    unique_bptr data;
++    int              id;
++    int              offset;
++    int              length;
++    bool             requested;
++    unique_block_ptr data;
 +};
 +
 +struct PiecesQueue
@@ -742,9 +726,9 @@ index 0000000..fa9b73f
 +
 +struct Status
 +{
-+    VLC::Mutex                  mutex;
-+    VLC::CondVar                cond;
-+    lt::torrent_status::state_t state;
++    VLC::Mutex    mutex;
++    VLC::CondVar  cond;
++    lts::state_t  state;
 +};
 +
 +class TorrentAccess
@@ -752,9 +736,10 @@ index 0000000..fa9b73f
 +    public:
 +        TorrentAccess(access_t* p_access) :
 +            access_{p_access},
-+            file_at_{0},
++            file_at_{-1},
 +            stopped_{false},
-+            fingerprint_{"VO", LIBTORRENT_VERSION_MAJOR, LIBTORRENT_VERSION_MINOR, 0, 0},
++            fingerprint_{"VL", PACKAGE_VERSION_MAJOR, PACKAGE_VERSION_MINOR,
++                               PACKAGE_VERSION_REVISION, PACKAGE_VERSION_EXTRA},
 +            session_{fingerprint_},
 +            download_dir_{nullptr, std::free} {
 +            uri_ = "torrent://"s + p_access->psz_location;
@@ -765,12 +750,11 @@ index 0000000..fa9b73f
 +
 +        static int ParseURI(const std::string& uri, lt::add_torrent_params& params);
 +        int RetrieveMetadata();
-+        int StartDownload();
++        int StartDownload(int file_at);
 +        void ReadNextPiece(Piece& piece, bool& eof);
 +        void SelectPieces(uint64_t offset);
 +
-+        void set_file(int file_at);
-+        void set_download_dir(unique_cptr&& dir);
++        void set_download_dir(unique_char_ptr&& dir);
 +        void set_parameters(lt::add_torrent_params&& params);
 +        const lt::torrent_info& metadata() const;
 +        bool has_metadata() const;
@@ -785,22 +769,17 @@ index 0000000..fa9b73f
 +        int                     file_at_;
 +        std::string             uri_;
 +        std::atomic_bool        stopped_;
-+        VLC::JoinableThread     thread_;
 +        lt::fingerprint         fingerprint_;
 +        lt::session             session_;
-+        unique_cptr             download_dir_;
++        unique_char_ptr         download_dir_;
 +        PiecesQueue             queue_;
 +        Status                  status_;
 +        lt::add_torrent_params  params_;
 +        lt::torrent_handle      handle_;
++        VLC::JoinableThread     thread_;
 +};
 +
-+inline void TorrentAccess::set_file(int file_at)
-+{
-+    file_at_ = file_at;
-+}
-+
-+inline void TorrentAccess::set_download_dir(unique_cptr&& dir)
++inline void TorrentAccess::set_download_dir(unique_char_ptr&& dir)
 +{
 +    download_dir_ = std::move(dir);
 +}
