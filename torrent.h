@@ -117,7 +117,6 @@ class TorrentAccess
         int                     file_at_;
         std::string             uri_;
         std::atomic_bool        stopped_;
-        VLC::JoinableThread     thread_;
         lt::fingerprint         fingerprint_;
         lt::session             session_;
         unique_char_ptr         download_dir_;
@@ -125,6 +124,7 @@ class TorrentAccess
         Status                  status_;
         lt::add_torrent_params  params_;
         lt::torrent_handle      handle_;
+        VLC::JoinableThread     thread_;
 };
 
 inline void TorrentAccess::set_download_dir(unique_char_ptr&& dir)
