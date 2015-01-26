@@ -25,6 +25,9 @@
 #include <functional>
 #include <fstream>
 
+#include <vlc_common.h>
+#include <vlc_url.h>
+
 #include <libtorrent/alert_types.hpp>
 #include <libtorrent/create_torrent.hpp>
 #include <libtorrent/extensions/metadata_transfer.hpp>
@@ -36,16 +39,18 @@
 
 int TorrentAccess::ParseURI(const std::string& uri, lt::add_torrent_params& params)
 {
-    std::string prefix = "magnet:?";
     lt::error_code ec;
 
-    if (!uri.compare(0, prefix.size(), prefix)) {
-        lt::parse_magnet_uri(uri, params, ec);
+    const auto prefix = "magnet:?"s;
+    const auto uri_decoded = std::string{decode_URI_duplicate(uri.c_str())};
+
+    if (!uri_decoded.compare(0, prefix.size(), prefix)) {
+        lt::parse_magnet_uri(uri_decoded, params, ec);
         if (ec)
             return VLC_EGENERIC;
     }
     else {
-        params.ti = new lt::torrent_info{uri, ec};
+        params.ti = new lt::torrent_info{uri_decoded, ec};
         if (ec)
             return VLC_EGENERIC;
     }
