@@ -1,0 +1,197 @@
+From 63d3cec6f6946370d232cdd6995662d7088c672e Mon Sep 17 00:00:00 2001
+From: Jonathan Calmels <jbjcalmels@gmail.com>
+Date: Mon, 26 Jan 2015 16:28:21 +0100
+Subject: [PATCH] Patch core/build
+
+---
+ configure.ac               |   5 +++
+ modules/access/Makefile.am |   7 +++
+ src/input/item.c           | 104 +++++++++++++++++++++++----------------------
+ src/text/url.c             |   8 +++-
+ 4 files changed, 72 insertions(+), 52 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index e5a22c3..b165fde 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1599,6 +1599,11 @@ dnl
+ PKG_ENABLE_MODULES_VLC([ARCHIVE], [access_archive], [libarchive >= 3.1.0], (libarchive support), [auto])
+ 
+ dnl
++dnl libtorrent
++dnl
++PKG_ENABLE_MODULES_VLC([TORRENT], [access_torrent], [libtorrent-rasterbar], (libtorrent support), [auto])
++
++dnl
+ dnl  live555 input
+ dnl
+ AC_ARG_ENABLE(live555,
+diff --git a/modules/access/Makefile.am b/modules/access/Makefile.am
+index ec8119f..e0526b4 100644
+--- a/modules/access/Makefile.am
++++ b/modules/access/Makefile.am
+@@ -29,6 +29,13 @@ access_LTLIBRARIES += libfilesystem_plugin.la
+ libidummy_plugin_la_SOURCES = access/idummy.c
+ access_LTLIBRARIES += libidummy_plugin.la
+ 
++libaccess_torrent_plugin_la_SOURCES = access/torrent/access.cpp access/torrent/torrent.cpp
++libaccess_torrent_plugin_la_CXXFLAGS = $(AM_CXXFLAGS) "-std=c++14" $(TORRENT_CFLAGS)
++libaccess_torrent_plugin_la_LIBADD = $(AM_LIBADD) $(TORRENT_LIBS)
++libaccess_torrent_plugin_la_LDFLAGS = $(AM_LDFLAGS) -rpath '$(accessdir)'
++access_LTLIBRARIES += $(LTLIBaccess_torrent)
++EXTRA_LTLIBRARIES += libaccess_torrent_plugin.la
++
+ libimem_plugin_la_SOURCES = access/imem.c
+ libimem_plugin_la_LIBADD = $(LIBM)
+ access_LTLIBRARIES += libimem_plugin.la
+diff --git a/src/input/item.c b/src/input/item.c
+index 33c7b26..106b17a 100644
+--- a/src/input/item.c
++++ b/src/input/item.c
+@@ -913,7 +913,7 @@ input_item_t *input_item_Copy( input_item_t *p_input )
+ 
+ struct item_type_entry
+ {
+-    const char psz_scheme[7];
++    const char psz_scheme[8];
+     uint8_t    i_type;
+ };
+ 
+@@ -931,56 +931,58 @@ static int GuessType( const input_item_t *p_item )
+     static const struct item_type_entry tab[] =
+     {   /* /!\ Alphabetical order /!\ */
+         /* Short match work, not just exact match */
+-        { "alsa",   ITEM_TYPE_CARD },
+-        { "atsc",   ITEM_TYPE_CARD },
+-        { "bd",     ITEM_TYPE_DISC },
+-        { "cable",  ITEM_TYPE_CARD },
+-        { "cdda",   ITEM_TYPE_CDDA },
+-        { "cqam",   ITEM_TYPE_CARD },
+-        { "dc1394", ITEM_TYPE_CARD },
+-        { "dccp",   ITEM_TYPE_NET },
+-        { "deckli", ITEM_TYPE_CARD }, /* decklink */
+-        { "dir",    ITEM_TYPE_DIRECTORY },
+-        { "dshow",  ITEM_TYPE_CARD },
+-        { "dv",     ITEM_TYPE_CARD },
+-        { "dvb",    ITEM_TYPE_CARD },
+-        { "dvd",    ITEM_TYPE_DISC },
+-        { "dtv",    ITEM_TYPE_CARD },
+-        { "eyetv",  ITEM_TYPE_CARD },
+-        { "fd",     ITEM_TYPE_UNKNOWN },
+-        { "ftp",    ITEM_TYPE_NET },
+-        { "http",   ITEM_TYPE_NET },
+-        { "icyx",   ITEM_TYPE_NET },
+-        { "imem",   ITEM_TYPE_UNKNOWN },
+-        { "itpc",   ITEM_TYPE_NET },
+-        { "jack",   ITEM_TYPE_CARD },
+-        { "linsys", ITEM_TYPE_CARD },
+-        { "live",   ITEM_TYPE_NET }, /* livedotcom */
+-        { "mms",    ITEM_TYPE_NET },
+-        { "mtp",    ITEM_TYPE_DISC },
+-        { "ofdm",   ITEM_TYPE_CARD },
+-        { "oss",    ITEM_TYPE_CARD },
+-        { "pnm",    ITEM_TYPE_NET },
+-        { "qam",    ITEM_TYPE_CARD },
+-        { "qpsk",   ITEM_TYPE_CARD },
+-        { "qtcapt", ITEM_TYPE_CARD }, /* qtcapture */
+-        { "raw139", ITEM_TYPE_CARD }, /* raw1394 */
+-        { "rt",     ITEM_TYPE_NET }, /* rtp, rtsp, rtmp */
+-        { "satell", ITEM_TYPE_CARD }, /* sattelite */
+-        { "screen", ITEM_TYPE_CARD },
+-        { "sdp",    ITEM_TYPE_NET },
+-        { "sftp",   ITEM_TYPE_NET },
+-        { "shm",    ITEM_TYPE_CARD },
+-        { "smb",    ITEM_TYPE_NET },
+-        { "svcd",   ITEM_TYPE_DISC },
+-        { "tcp",    ITEM_TYPE_NET },
+-        { "terres", ITEM_TYPE_CARD }, /* terrestrial */
+-        { "udp",    ITEM_TYPE_NET },  /* udplite too */
+-        { "unsv",   ITEM_TYPE_NET },
+-        { "usdigi", ITEM_TYPE_CARD }, /* usdigital */
+-        { "v4l",    ITEM_TYPE_CARD },
+-        { "vcd",    ITEM_TYPE_DISC },
+-        { "window", ITEM_TYPE_CARD },
++        { "alsa",    ITEM_TYPE_CARD },
++        { "atsc",    ITEM_TYPE_CARD },
++        { "bd",      ITEM_TYPE_DISC },
++        { "cable",   ITEM_TYPE_CARD },
++        { "cdda",    ITEM_TYPE_CDDA },
++        { "cqam",    ITEM_TYPE_CARD },
++        { "dc1394",  ITEM_TYPE_CARD },
++        { "dccp",    ITEM_TYPE_NET },
++        { "deckli",  ITEM_TYPE_CARD }, /* decklink */
++        { "dir",     ITEM_TYPE_DIRECTORY },
++        { "dshow",   ITEM_TYPE_CARD },
++        { "dv",      ITEM_TYPE_CARD },
++        { "dvb",     ITEM_TYPE_CARD },
++        { "dvd",     ITEM_TYPE_DISC },
++        { "dtv",     ITEM_TYPE_CARD },
++        { "eyetv",   ITEM_TYPE_CARD },
++        { "fd",      ITEM_TYPE_UNKNOWN },
++        { "ftp",     ITEM_TYPE_NET },
++        { "http",    ITEM_TYPE_NET },
++        { "icyx",    ITEM_TYPE_NET },
++        { "imem",    ITEM_TYPE_UNKNOWN },
++        { "itpc",    ITEM_TYPE_NET },
++        { "jack",    ITEM_TYPE_CARD },
++        { "linsys",  ITEM_TYPE_CARD },
++        { "live",    ITEM_TYPE_NET }, /* livedotcom */
++        { "magnet",  ITEM_TYPE_NET },
++        { "mms",     ITEM_TYPE_NET },
++        { "mtp",     ITEM_TYPE_DISC },
++        { "ofdm",    ITEM_TYPE_CARD },
++        { "oss",     ITEM_TYPE_CARD },
++        { "pnm",     ITEM_TYPE_NET },
++        { "qam",     ITEM_TYPE_CARD },
++        { "qpsk",    ITEM_TYPE_CARD },
++        { "qtcapt",  ITEM_TYPE_CARD }, /* qtcapture */
++        { "raw139",  ITEM_TYPE_CARD }, /* raw1394 */
++        { "rt",      ITEM_TYPE_NET }, /* rtp, rtsp, rtmp */
++        { "satell",  ITEM_TYPE_CARD }, /* sattelite */
++        { "screen",  ITEM_TYPE_CARD },
++        { "sdp",     ITEM_TYPE_NET },
++        { "sftp",    ITEM_TYPE_NET },
++        { "shm",     ITEM_TYPE_CARD },
++        { "smb",     ITEM_TYPE_NET },
++        { "svcd",    ITEM_TYPE_DISC },
++        { "tcp",     ITEM_TYPE_NET },
++        { "terres",  ITEM_TYPE_CARD }, /* terrestrial */
++        { "torrent", ITEM_TYPE_NET },
++        { "udp",     ITEM_TYPE_NET },  /* udplite too */
++        { "unsv",    ITEM_TYPE_NET },
++        { "usdigi",  ITEM_TYPE_CARD }, /* usdigital */
++        { "v4l",     ITEM_TYPE_CARD },
++        { "vcd",     ITEM_TYPE_DISC },
++        { "window",  ITEM_TYPE_CARD },
+     };
+     const struct item_type_entry *e;
+ 
+diff --git a/src/text/url.c b/src/text/url.c
+index cd7e488..860e073 100644
+--- a/src/text/url.c
++++ b/src/text/url.c
+@@ -146,7 +146,7 @@ char *encode_URI_component (const char *str)
+ /**
+  * Builds a URL representation from a local file path.
+  * @param path path to convert (or URI to copy)
+- * @param scheme URI scheme to use (default is auto: "file", "fd" or "smb")
++ * @param scheme URI scheme to use (default is auto: "file", "fd", "magnet" or "smb")
+  * @return a nul-terminated URI string (use free() to release it),
+  * or NULL in case of error (errno will be set accordingly)
+  */
+@@ -164,6 +164,12 @@ char *vlc_path2uri (const char *path, const char *scheme)
+ 
+     char *buf;
+ 
++    if (scheme == NULL && !strncmp (path, "magnet:?", 8)) {
++        if (asprintf (&buf, "%s://%s", "magnet", path) == -1)
++            buf = NULL;
++        return buf;
++    }
++
+ #ifdef __OS2__
+     char p[strlen (path) + 1];
+ 
+-- 
+2.2.2
+
