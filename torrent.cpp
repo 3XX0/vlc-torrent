@@ -246,8 +246,12 @@ void TorrentAccess::ReadNextPiece(Piece& piece, bool& eof)
     eof = false;
 
     auto s_lock = std::unique_lock<VLC::Mutex>{status_.mutex};
-    if (!status_.cond.WaitFor(s_lock, 500ms, [this]{ return status_.state == lts::downloading || lts::finished || lts::seeding;}))
+    auto cond = status_.cond.WaitFor(s_lock, 500ms, [s = status_.state]{
+      return s == lts::downloading || s == lts::finished || s == lts::seeding;
+    });
+    if (!cond)
         return;
+
     s_lock.unlock();
 
     auto q_lock = std::unique_lock<VLC::Mutex>{queue_.mutex};

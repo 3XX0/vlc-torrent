@@ -74,13 +74,11 @@ bool CondVar::WaitFor(std::unique_lock<Mutex>& m, std::chrono::duration<Rep, Per
 {
     using namespace std::chrono;
 
-    if (pred())
-        return true;
-
     auto t = mdate() + duration_cast<microseconds>(timeout).count();
-    if (vlc_cond_timedwait(&cond_, &m.mutex()->lock_, t) == ETIMEDOUT)
-        return false;
-    return pred();
+    while (!pred())
+        if (vlc_cond_timedwait(&cond_, &m.mutex()->lock_, t) == ETIMEDOUT)
+            return pred();
+    return true;
 }
 
 class JoinableThread
