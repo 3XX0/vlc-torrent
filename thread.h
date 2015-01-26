@@ -24,7 +24,7 @@
 #include <vlc_access.h>
 #include <vlc_threads.h>
 
-namespace VLC {
+namespace vlc {
 
 class Mutex
 {

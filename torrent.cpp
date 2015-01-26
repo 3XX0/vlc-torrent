@@ -151,7 +151,7 @@ void TorrentAccess::SelectPieces(uint64_t offset)
     const auto num_pieces = meta.num_pieces();
     const auto req_pieces = std::ceil((float) (req.length + req.start) / piece_size);
 
-    auto lock = std::unique_lock<VLC::Mutex>{queue_.mutex};
+    auto lock = std::unique_lock<vlc::Mutex>{queue_.mutex};
     queue_.pieces.clear();
 
     for (auto i = 0; i < num_pieces; ++i) {
@@ -212,7 +212,7 @@ void TorrentAccess::HandleStateChanged(const lt::alert* alert)
     }
     msg_Info(access_, "State changed to: %s", msg);
 
-    auto lock = std::unique_lock<VLC::Mutex>{status_.mutex};
+    auto lock = std::unique_lock<vlc::Mutex>{status_.mutex};
     status_.state = a->state;
     status_.cond.Signal();
 }
@@ -226,7 +226,7 @@ void TorrentAccess::HandleReadPiece(const lt::alert* alert)
         return;
     }
 
-    auto lock = std::unique_lock<VLC::Mutex>{queue_.mutex};
+    auto lock = std::unique_lock<vlc::Mutex>{queue_.mutex};
 
     auto p = std::find_if(std::begin(queue_.pieces), std::end(queue_.pieces),
       [a](const Piece& p) { return a->piece == p.id; }
@@ -245,7 +245,7 @@ void TorrentAccess::ReadNextPiece(Piece& piece, bool& eof)
 {
     eof = false;
 
-    auto s_lock = std::unique_lock<VLC::Mutex>{status_.mutex};
+    auto s_lock = std::unique_lock<vlc::Mutex>{status_.mutex};
     auto cond = status_.cond.WaitFor(s_lock, 500ms, [s = status_.state]{
       return s == lts::downloading || s == lts::finished || s == lts::seeding;
     });
@@ -254,7 +254,7 @@ void TorrentAccess::ReadNextPiece(Piece& piece, bool& eof)
 
     s_lock.unlock();
 
-    auto q_lock = std::unique_lock<VLC::Mutex>{queue_.mutex};
+    auto q_lock = std::unique_lock<vlc::Mutex>{queue_.mutex};
     if (queue_.pieces.empty()) {
         eof = true;
         return;

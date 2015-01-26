@@ -67,15 +67,15 @@ struct Piece
 
 struct PiecesQueue
 {
-    VLC::Mutex        mutex;
-    VLC::CondVar      cond;
+    vlc::Mutex        mutex;
+    vlc::CondVar      cond;
     std::deque<Piece> pieces;
 };
 
 struct Status
 {
-    VLC::Mutex    mutex;
-    VLC::CondVar  cond;
+    vlc::Mutex    mutex;
+    vlc::CondVar  cond;
     lts::state_t  state;
 };
 
@@ -124,7 +124,7 @@ class TorrentAccess
         Status                  status_;
         lt::add_torrent_params  params_;
         lt::torrent_handle      handle_;
-        VLC::JoinableThread     thread_;
+        vlc::JoinableThread     thread_;
 };
 
 inline void TorrentAccess::set_download_dir(unique_char_ptr&& dir)
