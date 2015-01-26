@@ -206,6 +206,7 @@ static block_t* Block(access_t* p_access)
     p_access->info.b_eof = eof;
     if (eof || p.data == nullptr)
         return nullptr;
+    p_access->info.i_pos += p.length;
     return p.data.release();
 }
 
@@ -213,5 +214,6 @@ static int Seek(access_t *p_access, uint64_t i_pos)
 {
     auto& torrent = p_access->p_sys->torrent;
     torrent.SelectPieces(i_pos);
+    p_access->info.i_pos += i_pos;
     return VLC_SUCCESS;
 }
