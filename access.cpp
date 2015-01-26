@@ -57,7 +57,7 @@ vlc_module_begin()
     add_shortcut("torrent", "file", "magnet")
     set_callbacks(Open, Close)
 
-    add_integer("file_at", nullptr, nullptr, nullptr, false)
+    add_integer("file_at", -1, nullptr, nullptr, false)
     change_private()
 
     add_directory("download_dir", nullptr, "Download directory",
@@ -100,7 +100,7 @@ static int open(access_t* p_access)
         if (torrent.RetrieveMetadata() != VLC_SUCCESS)
             return VLC_EGENERIC;
     }
-    if (file_at == 0) {
+    if (file_at < 0) {
         // Browse the torrent metadata and generate a playlist with the files in it.
         ACCESS_SET_CALLBACKS(nullptr, nullptr, Control, nullptr);
         p_access->pf_readdir = ReadDir;
@@ -147,9 +147,7 @@ static int ReadDir(access_t* p_access, input_item_node_t* p_node)
     const auto& torrent = p_access->p_sys->torrent;
     const auto& metadata = torrent.metadata();
 
-    msg_Info(p_access, "Browsing torrent file '%s'", metadata.name().c_str());
-
-    auto i = 1;
+    auto i = 0;
     for (auto f = metadata.begin_files(); f != metadata.end_files(); ++f, ++i) {
         const auto psz_uri = torrent.uri().c_str();
         const auto psz_name = f->filename();
@@ -159,8 +157,6 @@ static int ReadDir(access_t* p_access, input_item_node_t* p_node)
         input_item_AddOption(p_item, psz_option.c_str(), VLC_INPUT_OPTION_TRUSTED);
         input_item_node_AppendItem(p_node, p_item);
         input_item_Release(p_item);
-
-        msg_Info(p_access, "Adding '%s'", psz_name.c_str());
     }
     return VLC_SUCCESS;
 }

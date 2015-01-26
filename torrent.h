@@ -80,7 +80,7 @@ class TorrentAccess
     public:
         TorrentAccess(access_t* p_access) :
             access_{p_access},
-            file_at_{0},
+            file_at_{-1},
             stopped_{false},
             fingerprint_{"VO", LIBTORRENT_VERSION_MAJOR, LIBTORRENT_VERSION_MINOR, 0, 0},
             session_{fingerprint_},

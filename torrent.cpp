@@ -88,7 +88,7 @@ int TorrentAccess::StartDownload(int file_at)
 {
     lt::error_code ec;
 
-    assert(has_metadata() && file_at > 0 && download_dir_ != nullptr);
+    assert(has_metadata() && file_at >= 0 && download_dir_ != nullptr);
 
     session_.set_alert_mask(lta::status_notification | lta::storage_notification | lta::progress_notification);
     params_.save_path = download_dir_.get();
@@ -138,11 +138,11 @@ void TorrentAccess::Run()
 
 void TorrentAccess::SelectPieces(uint64_t offset)
 {
-    assert(has_metadata() && file_at_ > 0);
+    assert(has_metadata() && file_at_ >= 0);
 
     const auto& meta = metadata();
-    const auto& file = meta.file_at(file_at_ - 1);
-    auto req = meta.map_file(file_at_ - 1, offset, file.size - offset);
+    const auto& file = meta.file_at(file_at_);
+    auto req = meta.map_file(file_at_, offset, file.size - offset);
     auto piece_size = meta.piece_length();
     auto num_pieces = meta.num_pieces();
     auto req_pieces = std::ceil((float) (req.length + req.start) / piece_size);
