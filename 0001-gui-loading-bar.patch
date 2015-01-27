@@ -1,0 +1,322 @@
+From e94cad256e7a94b4e76af70ae8294ee6b1e84f43 Mon Sep 17 00:00:00 2001
+From: Jonathan Calmels <jbjcalmels@gmail.com>
+Date: Tue, 27 Jan 2015 23:38:51 +0100
+Subject: [PATCH 1/3] gui loading bar
+
+---
+ modules/gui/qt4/components/interface_widgets.cpp   |  2 +-
+ .../gui/qt4/components/playlist/playlist_model.cpp |  2 +-
+ modules/gui/qt4/extensions_manager.cpp             |  2 +-
+ modules/gui/qt4/input_manager.cpp                  | 10 ++---
+ modules/gui/qt4/input_manager.hpp                  |  2 +-
+ modules/gui/qt4/styles/seekstyle.cpp               | 13 +++++-
+ modules/gui/qt4/styles/seekstyle.hpp               |  1 +
+ modules/gui/qt4/util/input_slider.cpp              | 51 +++++++++++++++++++++-
+ modules/gui/qt4/util/input_slider.hpp              |  9 ++++
+ 9 files changed, 80 insertions(+), 12 deletions(-)
+
+diff --git a/modules/gui/qt4/components/interface_widgets.cpp b/modules/gui/qt4/components/interface_widgets.cpp
+index 29c2ac3..8bef5bd 100644
+--- a/modules/gui/qt4/components/interface_widgets.cpp
++++ b/modules/gui/qt4/components/interface_widgets.cpp
+@@ -493,7 +493,7 @@ SpeedLabel::SpeedLabel( intf_thread_t *_p_intf, QWidget *parent )
+     /* Change the SpeedRate in the Label */
+     CONNECT( THEMIM->getIM(), rateChanged( float ), this, setRate( float ) );
+ 
+-    DCONNECT( THEMIM, inputChanged( ),
++    DCONNECT( THEMIM, inputChanged( input_thread_t * ),
+               speedControl, activateOnState() );
+ 
+     setContentsMargins(4, 0, 4, 0);
+diff --git a/modules/gui/qt4/components/playlist/playlist_model.cpp b/modules/gui/qt4/components/playlist/playlist_model.cpp
+index 2bf217a..b5d68c4 100644
+--- a/modules/gui/qt4/components/playlist/playlist_model.cpp
++++ b/modules/gui/qt4/components/playlist/playlist_model.cpp
+@@ -59,7 +59,7 @@ PLModel::PLModel( playlist_t *_p_playlist,  /* THEPL */
+     rebuild( p_root );
+     DCONNECT( THEMIM->getIM(), metaChanged( input_item_t *),
+               this, processInputItemUpdate( input_item_t *) );
+-    DCONNECT( THEMIM, inputChanged( ),
++    DCONNECT( THEMIM, inputChanged( input_thread_t * ),
+               this, processInputItemUpdate( ) );
+     CONNECT( THEMIM, playlistItemAppended( int, int ),
+              this, processItemAppend( int, int ) );
+diff --git a/modules/gui/qt4/extensions_manager.cpp b/modules/gui/qt4/extensions_manager.cpp
+index ec2959d..e8af9b6 100644
+--- a/modules/gui/qt4/extensions_manager.cpp
++++ b/modules/gui/qt4/extensions_manager.cpp
+@@ -49,7 +49,7 @@ ExtensionsManager::ExtensionsManager( intf_thread_t *_p_intf, QObject *parent )
+     menuMapper = new QSignalMapper( this );
+     CONNECT( menuMapper, mapped( int ), this, triggerMenu( int ) );
+     CONNECT( THEMIM->getIM(), playingStatusChanged( int ), this, playingChanged( int ) );
+-    DCONNECT( THEMIM, inputChanged(  ),
++    DCONNECT( THEMIM, inputChanged( input_thread_t * ),
+               this, inputChanged( ) );
+     CONNECT( THEMIM->getIM(), metaChanged( input_item_t* ),
+              this, metaChanged( input_item_t* ) );
+diff --git a/modules/gui/qt4/input_manager.cpp b/modules/gui/qt4/input_manager.cpp
+index 25cfccd..1e31733 100644
+--- a/modules/gui/qt4/input_manager.cpp
++++ b/modules/gui/qt4/input_manager.cpp
+@@ -205,7 +205,7 @@ void InputManager::delInput()
+     emit encryptionChanged( false );
+     emit recordingStateChanged( false );
+ 
+-    emit cachingChanged( 1 );
++    emit cachingChanged( 0 );
+ }
+ 
+ /* Convert the event from the callbacks in actions */
+@@ -1016,13 +1016,13 @@ MainInputManager::MainInputManager( intf_thread_t *_p_intf )
+     mute.addCallback( this, SLOT(notifyMute(bool)) );
+ 
+     /* Warn our embedded IM about input changes */
+-    DCONNECT( this, inputChanged(),
++    DCONNECT( this, inputChanged( input_thread_t * ),
+               im, inputChangedHandler() );
+ 
+     /* initialize p_input (an input can already be running) */
+     p_input = playlist_CurrentInput( THEPL );
+     if( p_input )
+-        emit inputChanged( );
++        emit inputChanged( p_input );
+ 
+     /* Audio Menu */
+     menusAudioMapper = new QSignalMapper();
+@@ -1035,7 +1035,7 @@ MainInputManager::~MainInputManager()
+     {
+        vlc_object_release( p_input );
+        p_input = NULL;
+-       emit inputChanged( );
++       emit inputChanged( NULL );
+     }
+ 
+     var_DelCallback( THEPL, "activity", PLItemChanged, this );
+@@ -1090,7 +1090,7 @@ void MainInputManager::customEvent( QEvent *event )
+     if( p_input != NULL )
+         vlc_object_release( p_input );
+     p_input = playlist_CurrentInput( THEPL );
+-    emit inputChanged( );
++    emit inputChanged( p_input );
+ }
+ 
+ /* Playlist Control functions */
+diff --git a/modules/gui/qt4/input_manager.hpp b/modules/gui/qt4/input_manager.hpp
+index e6cc0ed..62b359d 100644
+--- a/modules/gui/qt4/input_manager.hpp
++++ b/modules/gui/qt4/input_manager.hpp
+@@ -313,7 +313,7 @@ private slots:
+     void menusUpdateAudio( const QString& );
+ 
+ signals:
+-    void inputChanged( );
++    void inputChanged( input_thread_t * );
+     void volumeChanged( float );
+     void soundMuteChanged( bool );
+     void playlistItemAppended( int itemId, int parentId );
+diff --git a/modules/gui/qt4/styles/seekstyle.cpp b/modules/gui/qt4/styles/seekstyle.cpp
+index 9c90d2c..716349b 100644
+--- a/modules/gui/qt4/styles/seekstyle.cpp
++++ b/modules/gui/qt4/styles/seekstyle.cpp
+@@ -127,8 +127,19 @@ void SeekStyle::drawComplexControl( ComplexControl cc, const QStyleOptionComplex
+                     painter->drawRoundedRect( valueRect, RADIUS, RADIUS );
+                 }
+ 
++                if ( slideroptions->buffering == 0 && slideroptions->animationloading > 0 )
++                {
++                    int width = groove.width() - groove.width() / 6;
++                    QRect innerRect = groove.adjusted( slideroptions->animationloading * width + 1, 1,
++                            width * ( -1.0 + slideroptions->animationloading ) - 1, 0);
++                    QColor overlayColor = QColor( "Orange" );
++                    overlayColor.setAlpha( 128 );
++                    painter->setBrush( overlayColor );
++                    painter->drawRoundedRect( innerRect, RADIUS, RADIUS );
++                }
++
+                 /* draw buffering overlay */
+-                if ( slideroptions->buffering < 1.0 )
++                if ( slideroptions->buffering > 0 && slideroptions->buffering < 1.0 )
+                 {
+                     QRect innerRect = groove.adjusted( 1, 1,
+                                         groove.width() * ( -1.0 + slideroptions->buffering ) - 1, 0 );
+diff --git a/modules/gui/qt4/styles/seekstyle.hpp b/modules/gui/qt4/styles/seekstyle.hpp
+index 953963d..ac142e0 100644
+--- a/modules/gui/qt4/styles/seekstyle.hpp
++++ b/modules/gui/qt4/styles/seekstyle.hpp
+@@ -41,6 +41,7 @@ public:
+         int length;
+         bool animate;
+         qreal animationopacity;
++        qreal animationloading;
+         QList<int64_t> points;
+     };
+ 
+diff --git a/modules/gui/qt4/util/input_slider.cpp b/modules/gui/qt4/util/input_slider.cpp
+index fe3cdc0..c3f0ccd 100644
+--- a/modules/gui/qt4/util/input_slider.cpp
++++ b/modules/gui/qt4/util/input_slider.cpp
+@@ -32,6 +32,7 @@
+ #include "util/input_slider.hpp"
+ #include "util/timetooltip.hpp"
+ #include "adapters/seekpoints.hpp"
++#include "input_manager.hpp"
+ 
+ #include <QPaintEvent>
+ #include <QPainter>
+@@ -60,8 +61,9 @@ SeekSlider::SeekSlider( Qt::Orientation q, QWidget *_parent, bool _static )
+ {
+     isSliding = false;
+     isJumping = false;
+-    f_buffering = 1.0;
++    f_buffering = 0;
+     mHandleOpacity = 1.0;
++    mLoading = 0;
+     chapters = NULL;
+     mHandleLength = -1;
+     b_seekable = true;
+@@ -130,10 +132,27 @@ SeekSlider::SeekSlider( Qt::Orientation q, QWidget *_parent, bool _static )
+     animHandle->setStartValue( 0.0 );
+     animHandle->setEndValue( 1.0 );
+ 
++    animLoadingIn = new QPropertyAnimation( this, "loadingProperty", this );
++    animLoadingIn->setDuration( 2000 );
++    animLoadingIn->setStartValue( 0 );
++    animLoadingIn->setEndValue( 1.0 );
++    animLoadingIn->setEasingCurve( QEasingCurve::OutBounce );
++    animLoadingOut = new QPropertyAnimation( this, "loadingProperty", this );
++    animLoadingOut->setDuration( 2000 );
++    animLoadingOut->setStartValue( 1.0 );
++    animLoadingOut->setEndValue( 0 );
++    animLoadingOut->setEasingCurve( QEasingCurve::OutBounce );
++
++    animLoading = new QSequentialAnimationGroup();
++    animLoading->addAnimation( animLoadingIn );
++    animLoading->addAnimation( animLoadingOut );
++    animLoading->setLoopCount( -1 );
++
+     hideHandleTimer = new QTimer( this );
+     hideHandleTimer->setSingleShot( true );
+     hideHandleTimer->setInterval( FADEOUTDELAY );
+ 
++    CONNECT( MainInputManager::getInstance(), inputChanged( input_thread_t * ), this , inputUpdated( input_thread_t * ) );
+     CONNECT( this, sliderMoved( int ), this, startSeekTimer() );
+     CONNECT( seekLimitTimer, timeout(), this, updatePos() );
+     CONNECT( hideHandleTimer, timeout(), this, hideHandle() );
+@@ -202,9 +221,24 @@ void SeekSlider::updateBuffering( float f_buffering_ )
+     if ( f_buffering_ < f_buffering )
+         bufferingStart = QTime::currentTime();
+     f_buffering = f_buffering_;
++    if ( f_buffering > 0 || isEnabled() ) {
++        animLoading->stop();
++        mLoading = 0;
++    }
+     repaint();
+ }
+ 
++void SeekSlider::inputUpdated( input_thread_t *p_input )
++{
++    if ( p_input == NULL ) {
++        animLoading->stop();
++        mLoading = 0;
++        repaint();
++    }
++    else if ( f_buffering == 0 && !isEnabled() )
++        animLoading->start();
++}
++
+ void SeekSlider::processReleasedButton()
+ {
+     if ( !isSliding && !isJumping ) return;
+@@ -393,11 +427,12 @@ void SeekSlider::paintEvent( QPaintEvent *ev )
+         if ( QTime::currentTime() > bufferingStart.addSecs( 1 ) )
+             option.buffering = f_buffering;
+         else
+-            option.buffering = 1.0;
++            option.buffering = 0;
+         option.length = inputLength;
+         option.animate = ( animHandle->state() == QAbstractAnimation::Running
+                            || hideHandleTimer->isActive() );
+         option.animationopacity = mHandleOpacity;
++        option.animationloading = mLoading;
+         option.sliderPosition = sliderPosition();
+         option.sliderValue = value();
+         option.maximum = maximum();
+@@ -446,6 +481,11 @@ qreal SeekSlider::handleOpacity() const
+     return mHandleOpacity;
+ }
+ 
++qreal SeekSlider::loading() const
++{
++    return mLoading;
++}
++
+ void SeekSlider::setHandleOpacity(qreal opacity)
+ {
+     mHandleOpacity = opacity;
+@@ -453,6 +493,13 @@ void SeekSlider::setHandleOpacity(qreal opacity)
+     update();
+ }
+ 
++void SeekSlider::setLoading(qreal loading)
++{
++    mLoading = loading;
++    /* Request a new paintevent */
++    update();
++}
++
+ inline int SeekSlider::handleLength()
+ {
+     if ( mHandleLength > 0 )
+diff --git a/modules/gui/qt4/util/input_slider.hpp b/modules/gui/qt4/util/input_slider.hpp
+index ef3ae3d..b7b1c86 100644
+--- a/modules/gui/qt4/util/input_slider.hpp
++++ b/modules/gui/qt4/util/input_slider.hpp
+@@ -35,6 +35,7 @@
+ #include <QSlider>
+ #include <QPainter>
+ #include <QTime>
++#include <QSequentialAnimationGroup>
+ 
+ #define MSTRTIME_MAX_SIZE 22
+ 
+@@ -52,6 +53,7 @@ class SeekSlider : public QSlider
+ {
+     Q_OBJECT
+     Q_PROPERTY(qreal handleOpacity READ handleOpacity WRITE setHandleOpacity)
++    Q_PROPERTY(qreal loadingProperty READ loading WRITE setLoading)
+ public:
+     SeekSlider( Qt::Orientation q, QWidget *_parent = 0, bool _classic = false );
+     virtual ~SeekSlider();
+@@ -73,7 +75,9 @@ protected:
+ 
+     void processReleasedButton();
+     qreal handleOpacity() const;
++    qreal loading() const;
+     void setHandleOpacity( qreal opacity );
++    void setLoading( qreal loading );
+     int handleLength();
+ 
+ private:
+@@ -102,7 +106,11 @@ private:
+ 
+     /* Handle's animation */
+     qreal mHandleOpacity;
++    qreal mLoading;
+     QPropertyAnimation *animHandle;
++    QPropertyAnimation *animLoadingIn;
++    QPropertyAnimation *animLoadingOut;
++    QSequentialAnimationGroup *animLoading;
+     QTimer *hideHandleTimer;
+ 
+ public slots:
+@@ -114,6 +122,7 @@ public slots:
+ private slots:
+     void startSeekTimer();
+     void updatePos();
++    void inputUpdated( input_thread_t *p_input );
+ 
+ signals:
+     void sliderDragged( float );
+-- 
+2.2.2
+

@@ -1,22 +1,58 @@
-From dd9ea89ebff5872c93035b638e72a9cff6c7f958 Mon Sep 17 00:00:00 2001
+From cc321aa5c49b0861515f5282ca3ab47550b6cfff Mon Sep 17 00:00:00 2001
 From: Jonathan Calmels <jbjcalmels@gmail.com>
-Date: Mon, 26 Jan 2015 19:38:50 +0100
-Subject: [PATCH 2/2] torrent access
+Date: Tue, 27 Jan 2015 23:40:44 +0100
+Subject: [PATCH 3/3] torrent
 
 ---
+ configure.ac                       |   5 +
+ modules/access/Makefile.am         |   7 +
  modules/access/torrent/access.cpp  | 219 +++++++++++++++++++++++++++++
  modules/access/torrent/thread.h    | 118 ++++++++++++++++
  modules/access/torrent/torrent.cpp | 275 +++++++++++++++++++++++++++++++++++++
  modules/access/torrent/torrent.h   | 153 +++++++++++++++++++++
- 4 files changed, 765 insertions(+)
+ 6 files changed, 777 insertions(+)
  create mode 100644 modules/access/torrent/access.cpp
  create mode 100644 modules/access/torrent/thread.h
  create mode 100644 modules/access/torrent/torrent.cpp
  create mode 100644 modules/access/torrent/torrent.h
 
+diff --git a/configure.ac b/configure.ac
+index e5a22c3..b165fde 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1599,6 +1599,11 @@ dnl
+ PKG_ENABLE_MODULES_VLC([ARCHIVE], [access_archive], [libarchive >= 3.1.0], (libarchive support), [auto])
+ 
+ dnl
++dnl libtorrent
++dnl
++PKG_ENABLE_MODULES_VLC([TORRENT], [access_torrent], [libtorrent-rasterbar], (libtorrent support), [auto])
++
++dnl
+ dnl  live555 input
+ dnl
+ AC_ARG_ENABLE(live555,
+diff --git a/modules/access/Makefile.am b/modules/access/Makefile.am
+index ec8119f..e0526b4 100644
+--- a/modules/access/Makefile.am
++++ b/modules/access/Makefile.am
+@@ -29,6 +29,13 @@ access_LTLIBRARIES += libfilesystem_plugin.la
+ libidummy_plugin_la_SOURCES = access/idummy.c
+ access_LTLIBRARIES += libidummy_plugin.la
+ 
++libaccess_torrent_plugin_la_SOURCES = access/torrent/access.cpp access/torrent/torrent.cpp
++libaccess_torrent_plugin_la_CXXFLAGS = $(AM_CXXFLAGS) "-std=c++14" $(TORRENT_CFLAGS)
++libaccess_torrent_plugin_la_LIBADD = $(AM_LIBADD) $(TORRENT_LIBS)
++libaccess_torrent_plugin_la_LDFLAGS = $(AM_LDFLAGS) -rpath '$(accessdir)'
++access_LTLIBRARIES += $(LTLIBaccess_torrent)
++EXTRA_LTLIBRARIES += libaccess_torrent_plugin.la
++
+ libimem_plugin_la_SOURCES = access/imem.c
+ libimem_plugin_la_LIBADD = $(LIBM)
+ access_LTLIBRARIES += libimem_plugin.la
 diff --git a/modules/access/torrent/access.cpp b/modules/access/torrent/access.cpp
 new file mode 100644
-index 0000000..71ee380
+index 0000000..db59553
 --- /dev/null
 +++ b/modules/access/torrent/access.cpp
 @@ -0,0 +1,219 @@
@@ -236,12 +272,12 @@ index 0000000..71ee380
 +{
 +    auto& torrent = p_access->p_sys->torrent;
 +    torrent.SelectPieces(i_pos);
-+    p_access->info.i_pos += i_pos;
++    p_access->info.i_pos = i_pos;
 +    return VLC_SUCCESS;
 +}
 diff --git a/modules/access/torrent/thread.h b/modules/access/torrent/thread.h
 new file mode 100644
-index 0000000..95865bb
+index 0000000..958c07f
 --- /dev/null
 +++ b/modules/access/torrent/thread.h
 @@ -0,0 +1,118 @@
@@ -271,7 +307,7 @@ index 0000000..95865bb
 +#include <vlc_access.h>
 +#include <vlc_threads.h>
 +
-+namespace VLC {
++namespace vlc {
 +
 +class Mutex
 +{
@@ -365,7 +401,7 @@ index 0000000..95865bb
 +}
 diff --git a/modules/access/torrent/torrent.cpp b/modules/access/torrent/torrent.cpp
 new file mode 100644
-index 0000000..33316bd0
+index 0000000..e5e0a55
 --- /dev/null
 +++ b/modules/access/torrent/torrent.cpp
 @@ -0,0 +1,275 @@
@@ -522,7 +558,7 @@ index 0000000..33316bd0
 +    const auto num_pieces = meta.num_pieces();
 +    const auto req_pieces = std::ceil((float) (req.length + req.start) / piece_size);
 +
-+    auto lock = std::unique_lock<VLC::Mutex>{queue_.mutex};
++    auto lock = std::unique_lock<vlc::Mutex>{queue_.mutex};
 +    queue_.pieces.clear();
 +
 +    for (auto i = 0; i < num_pieces; ++i) {
@@ -583,7 +619,7 @@ index 0000000..33316bd0
 +    }
 +    msg_Info(access_, "State changed to: %s", msg);
 +
-+    auto lock = std::unique_lock<VLC::Mutex>{status_.mutex};
++    auto lock = std::unique_lock<vlc::Mutex>{status_.mutex};
 +    status_.state = a->state;
 +    status_.cond.Signal();
 +}
@@ -597,7 +633,7 @@ index 0000000..33316bd0
 +        return;
 +    }
 +
-+    auto lock = std::unique_lock<VLC::Mutex>{queue_.mutex};
++    auto lock = std::unique_lock<vlc::Mutex>{queue_.mutex};
 +
 +    auto p = std::find_if(std::begin(queue_.pieces), std::end(queue_.pieces),
 +      [a](const Piece& p) { return a->piece == p.id; }
@@ -616,7 +652,7 @@ index 0000000..33316bd0
 +{
 +    eof = false;
 +
-+    auto s_lock = std::unique_lock<VLC::Mutex>{status_.mutex};
++    auto s_lock = std::unique_lock<vlc::Mutex>{status_.mutex};
 +    auto cond = status_.cond.WaitFor(s_lock, 500ms, [s = status_.state]{
 +      return s == lts::downloading || s == lts::finished || s == lts::seeding;
 +    });
@@ -625,7 +661,7 @@ index 0000000..33316bd0
 +
 +    s_lock.unlock();
 +
-+    auto q_lock = std::unique_lock<VLC::Mutex>{queue_.mutex};
++    auto q_lock = std::unique_lock<vlc::Mutex>{queue_.mutex};
 +    if (queue_.pieces.empty()) {
 +        eof = true;
 +        return;
@@ -646,7 +682,7 @@ index 0000000..33316bd0
 +}
 diff --git a/modules/access/torrent/torrent.h b/modules/access/torrent/torrent.h
 new file mode 100644
-index 0000000..5dd5e0a
+index 0000000..acf982d
 --- /dev/null
 +++ b/modules/access/torrent/torrent.h
 @@ -0,0 +1,153 @@
@@ -719,15 +755,15 @@ index 0000000..5dd5e0a
 +
 +struct PiecesQueue
 +{
-+    VLC::Mutex        mutex;
-+    VLC::CondVar      cond;
++    vlc::Mutex        mutex;
++    vlc::CondVar      cond;
 +    std::deque<Piece> pieces;
 +};
 +
 +struct Status
 +{
-+    VLC::Mutex    mutex;
-+    VLC::CondVar  cond;
++    vlc::Mutex    mutex;
++    vlc::CondVar  cond;
 +    lts::state_t  state;
 +};
 +
@@ -776,7 +812,7 @@ index 0000000..5dd5e0a
 +        Status                  status_;
 +        lt::add_torrent_params  params_;
 +        lt::torrent_handle      handle_;
-+        VLC::JoinableThread     thread_;
++        vlc::JoinableThread     thread_;
 +};
 +
 +inline void TorrentAccess::set_download_dir(unique_char_ptr&& dir)

@@ -1,49 +1,13 @@
-From 9c35b0e32c9dcef7d38523b4ab81d3984caef8a9 Mon Sep 17 00:00:00 2001
+From e4178f5f25ae044035cf1297c4ae12cc0377280a Mon Sep 17 00:00:00 2001
 From: Jonathan Calmels <jbjcalmels@gmail.com>
-Date: Mon, 26 Jan 2015 16:28:21 +0100
-Subject: [PATCH 1/2] patch core+build
+Date: Tue, 27 Jan 2015 23:39:18 +0100
+Subject: [PATCH 2/3] core fix
 
 ---
- configure.ac               |   5 +++
- modules/access/Makefile.am |   7 +++
- src/input/item.c           | 104 +++++++++++++++++++++++----------------------
- src/text/url.c             |   8 +++-
- 4 files changed, 72 insertions(+), 52 deletions(-)
+ src/input/item.c | 104 ++++++++++++++++++++++++++++---------------------------
+ src/text/url.c   |   8 ++++-
+ 2 files changed, 60 insertions(+), 52 deletions(-)
 
-diff --git a/configure.ac b/configure.ac
-index e5a22c3..b165fde 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -1599,6 +1599,11 @@ dnl
- PKG_ENABLE_MODULES_VLC([ARCHIVE], [access_archive], [libarchive >= 3.1.0], (libarchive support), [auto])
- 
- dnl
-+dnl libtorrent
-+dnl
-+PKG_ENABLE_MODULES_VLC([TORRENT], [access_torrent], [libtorrent-rasterbar], (libtorrent support), [auto])
-+
-+dnl
- dnl  live555 input
- dnl
- AC_ARG_ENABLE(live555,
-diff --git a/modules/access/Makefile.am b/modules/access/Makefile.am
-index ec8119f..e0526b4 100644
---- a/modules/access/Makefile.am
-+++ b/modules/access/Makefile.am
-@@ -29,6 +29,13 @@ access_LTLIBRARIES += libfilesystem_plugin.la
- libidummy_plugin_la_SOURCES = access/idummy.c
- access_LTLIBRARIES += libidummy_plugin.la
- 
-+libaccess_torrent_plugin_la_SOURCES = access/torrent/access.cpp access/torrent/torrent.cpp
-+libaccess_torrent_plugin_la_CXXFLAGS = $(AM_CXXFLAGS) "-std=c++14" $(TORRENT_CFLAGS)
-+libaccess_torrent_plugin_la_LIBADD = $(AM_LIBADD) $(TORRENT_LIBS)
-+libaccess_torrent_plugin_la_LDFLAGS = $(AM_LDFLAGS) -rpath '$(accessdir)'
-+access_LTLIBRARIES += $(LTLIBaccess_torrent)
-+EXTRA_LTLIBRARIES += libaccess_torrent_plugin.la
-+
- libimem_plugin_la_SOURCES = access/imem.c
- libimem_plugin_la_LIBADD = $(LIBM)
- access_LTLIBRARIES += libimem_plugin.la
 diff --git a/src/input/item.c b/src/input/item.c
 index 33c7b26..106b17a 100644
 --- a/src/input/item.c
