@@ -56,7 +56,8 @@ struct Piece
         offset{off},
         length{len},
         requested{false},
-        data{nullptr, block_Release} {}
+        data{nullptr, block_Release}
+    {}
 
     int              id;
     int              offset;
@@ -86,15 +87,13 @@ class TorrentAccess
             access_{p_access},
             file_at_{-1},
             stopped_{false},
+            download_dir_{nullptr, std::free},
+            uri_{"torrent://"s + p_access->psz_location},
             fingerprint_{"VL", PACKAGE_VERSION_MAJOR, PACKAGE_VERSION_MINOR,
                                PACKAGE_VERSION_REVISION, PACKAGE_VERSION_EXTRA},
-            session_{fingerprint_},
-            download_dir_{nullptr, std::free} {
-            uri_ = "torrent://"s + p_access->psz_location;
-        }
-        ~TorrentAccess() {
-            stopped_ = true;
-        }
+            session_{fingerprint_}
+        {}
+        ~TorrentAccess();
 
         static int ParseURI(const std::string& uri, lt::add_torrent_params& params);
         int RetrieveMetadata();
@@ -115,11 +114,11 @@ class TorrentAccess
 
         access_t*               access_;
         int                     file_at_;
-        std::string             uri_;
         std::atomic_bool        stopped_;
+        unique_char_ptr         download_dir_;
+        std::string             uri_;
         lt::fingerprint         fingerprint_;
         lt::session             session_;
-        unique_char_ptr         download_dir_;
         PiecesQueue             queue_;
         Status                  status_;
         lt::add_torrent_params  params_;

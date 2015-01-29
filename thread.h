@@ -31,17 +31,21 @@ class Mutex
     friend class CondVar;
 
     public:
-        Mutex() {
+        Mutex()
+        {
             vlc_mutex_init(&lock_);
         }
-        ~Mutex() {
+        ~Mutex()
+        {
             vlc_mutex_destroy(&lock_);
         }
 
-        void lock() {
+        void lock()
+        {
             vlc_mutex_lock(&lock_);
         }
-        void unlock() noexcept {
+        void unlock() noexcept
+        {
             vlc_mutex_unlock(&lock_);
         }
 
@@ -52,16 +56,19 @@ class Mutex
 class CondVar
 {
     public:
-        CondVar() {
+        CondVar()
+        {
             vlc_cond_init(&cond_);
         }
-        ~CondVar() {
+        ~CondVar()
+        {
             vlc_cond_destroy(&cond_);
         }
 
         template <class Predicate, typename Rep, typename Period>
         bool WaitFor(std::unique_lock<Mutex>& m, std::chrono::duration<Rep, Period> timeout, Predicate pred);
-        void Signal() {
+        void Signal()
+        {
             vlc_cond_signal(&cond_);
         }
 
@@ -85,7 +92,8 @@ class JoinableThread
 {
     public:
         JoinableThread() = default;
-        ~JoinableThread() {
+        ~JoinableThread()
+        {
             if (joinable_)
                 vlc_join(thread_, nullptr);
         }

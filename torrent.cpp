@@ -37,6 +37,15 @@
 
 #include "torrent.h"
 
+TorrentAccess::~TorrentAccess()
+{
+    stopped_ = true;
+    session_.pause();
+    try {
+        session_.remove_torrent(handle_);
+    } catch (const lt::libtorrent_exception&) {}
+}
+
 int TorrentAccess::ParseURI(const std::string& uri, lt::add_torrent_params& params)
 {
     lt::error_code ec;
