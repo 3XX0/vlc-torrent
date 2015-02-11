@@ -24,6 +24,9 @@
 #include <deque>
 #include <atomic>
 #include <chrono>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 
 #ifdef HAVE_CONFIG_H
 # include "config.h"
@@ -36,8 +39,6 @@
 #include <libtorrent/torrent_handle.hpp>
 #include <libtorrent/torrent_info.hpp>
 #include <libtorrent/add_torrent_params.hpp>
-
-#include "thread.h"
 
 namespace lt = libtorrent;
 using namespace std::string_literals;
@@ -68,16 +69,16 @@ struct Piece
 
 struct PiecesQueue
 {
-    vlc::Mutex        mutex;
-    vlc::CondVar      cond;
-    std::deque<Piece> pieces;
+    std::mutex              mutex;
+    std::condition_variable cond;
+    std::deque<Piece>       pieces;
 };
 
 struct Status
 {
-    vlc::Mutex    mutex;
-    vlc::CondVar  cond;
-    lts::state_t  state;
+    std::mutex              mutex;
+    std::condition_variable cond;
+    lts::state_t            state;
 };
 
 class TorrentAccess
@@ -123,7 +124,7 @@ class TorrentAccess
         Status                  status_;
         lt::add_torrent_params  params_;
         lt::torrent_handle      handle_;
-        vlc::JoinableThread     thread_;
+        std::thread             thread_;
 };
 
 inline void TorrentAccess::set_download_dir(unique_char_ptr&& dir)
