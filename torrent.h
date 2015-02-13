@@ -23,7 +23,6 @@
 #include <memory>
 #include <deque>
 #include <atomic>
-#include <chrono>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -41,8 +40,6 @@
 #include <libtorrent/add_torrent_params.hpp>
 
 namespace lt = libtorrent;
-using namespace std::string_literals;
-using namespace std::literals::chrono_literals;
 
 using lta = lt::alert;
 using lts = lt::torrent_status;
@@ -89,7 +86,7 @@ class TorrentAccess
             file_at_{-1},
             stopped_{false},
             download_dir_{nullptr, std::free},
-            uri_{"torrent://"s + p_access->psz_location},
+            uri_{std::string{"torrent://"} + p_access->psz_location},
             fingerprint_{"VL", PACKAGE_VERSION_MAJOR, PACKAGE_VERSION_MINOR,
                                PACKAGE_VERSION_REVISION, PACKAGE_VERSION_EXTRA},
             session_{fingerprint_}

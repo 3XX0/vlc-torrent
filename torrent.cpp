@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <functional>
 #include <fstream>
+#include <chrono>
 
 #include <vlc_common.h>
 #include <vlc_url.h>
@@ -53,7 +54,7 @@ int TorrentAccess::ParseURI(const std::string& uri, lt::add_torrent_params& para
 {
     lt::error_code ec;
 
-    const auto prefix = "magnet:?"s;
+    const auto prefix = std::string{"magnet:?"};
     const auto uri_decoded = std::string{decode_URI_duplicate(uri.c_str())};
 
     if (!uri_decoded.compare(0, prefix.size(), prefix)) {
@@ -90,7 +91,7 @@ int TorrentAccess::RetrieveMetadata()
 
     // Create the torrent file.
     const auto torrent = lt::create_torrent{metadata};
-    const auto path = download_dir_.get() + "/"s + metadata.name() + ".torrent";
+    const auto path = std::string{download_dir_.get()} + "/" + metadata.name() + ".torrent";
     std::ofstream file{path, std::ios_base::binary};
     if (!file.is_open())
         return VLC_EGENERIC;
@@ -256,18 +257,19 @@ void TorrentAccess::HandleReadPiece(const lt::alert* alert)
 
 void TorrentAccess::ReadNextPiece(Piece& piece, bool& eof)
 {
+    auto timeout = std::chrono::milliseconds{500};
     eof = false;
 
-    auto s_lock = std::unique_lock<std::mutex>{status_.mutex};
-    auto cond = status_.cond.wait_for(s_lock, 500ms, [s = status_.state]{
-      return s == lts::downloading || s == lts::finished || s == lts::seeding;
-    });
-    if (!cond)
-        return;
+    {
+        auto lock = std::unique_lock<std::mutex>{status_.mutex};
+        auto cond = status_.cond.wait_for(lock, timeout, [s = status_.state]{
+                return s == lts::downloading || s == lts::finished || s == lts::seeding;
+        });
+        if (!cond)
+            return;
+    }
 
-    s_lock.unlock();
-
-    auto q_lock = std::unique_lock<std::mutex>{queue_.mutex};
+    auto lock = std::unique_lock<std::mutex>{queue_.mutex};
     if (queue_.pieces.empty()) {
         eof = true;
         return;
@@ -279,7 +281,7 @@ void TorrentAccess::ReadNextPiece(Piece& piece, bool& eof)
         next_piece.requested = true;
         msg_Dbg(access_, "Piece requested: %d", next_piece.id);
     }
-    if (!queue_.cond.wait_for(q_lock, 500ms, [&next_piece]{ return next_piece.data != nullptr; }))
+    if (!queue_.cond.wait_for(lock, timeout, [&next_piece]{ return next_piece.data != nullptr; }))
         return;
 
     piece = std::move(next_piece);
