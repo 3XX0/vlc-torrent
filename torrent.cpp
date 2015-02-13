@@ -42,10 +42,8 @@ TorrentAccess::~TorrentAccess()
 {
     stopped_ = true;
     session_.pause();
-    try {
+    if (handle_.is_valid())
         session_.remove_torrent(handle_);
-    } catch (const lt::libtorrent_exception&) {}
-
     if (thread_.joinable())
         thread_.join();
 }
