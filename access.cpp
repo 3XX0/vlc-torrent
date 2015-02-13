@@ -57,11 +57,12 @@ vlc_module_begin()
     add_shortcut("torrent", "file", "magnet")
     set_callbacks(Open, Close)
 
-    add_integer("file_at", -1, nullptr, nullptr, false)
+    add_integer("torrent-file-index", -1, N_("Torrent file index"),
+      N_("Index of the file to play within the torrent"), false)
     change_private()
 
-    add_directory("download_dir", nullptr, "Download directory",
-      "Directory used to store dowloaded files", false)
+    add_directory("download-dir", nullptr, N_("Download directory"),
+      N_("Directory used to store dowloaded files"), false)
 
 vlc_module_end()
 
@@ -71,7 +72,7 @@ vlc_module_end()
 
 static unique_char_ptr var_GetDownloadDir(const access_t* p_access)
 {
-    auto dir = var_InheritString(p_access, "download_dir");
+    auto dir = var_InheritString(p_access, "download-dir");
     if (dir == nullptr)
         dir = config_GetUserDir(VLC_DOWNLOAD_DIR);
     return {dir, std::free};
@@ -90,7 +91,7 @@ static int open(access_t* p_access)
 
     p_access->p_sys = new access_sys_t{{p_access}};
     auto& torrent = p_access->p_sys->torrent;
-    auto file_at = var_InheritInteger(p_access, "file_at");
+    auto file_at = var_InheritInteger(p_access, "torrent-file-index");
 
     torrent.set_parameters(std::move(params));
     torrent.set_download_dir(std::move(dir));
@@ -152,7 +153,7 @@ static int ReadDir(access_t* p_access, input_item_node_t* p_node)
     for (auto f = metadata.begin_files(); f != metadata.end_files(); ++f, ++i) {
         const auto psz_uri = torrent.uri().c_str();
         const auto psz_name = f->filename();
-        const auto psz_option = "file_at=" + std::to_string(i);
+        const auto psz_option = "torrent-file-index=" + std::to_string(i);
 
         auto p_item = input_item_New(psz_uri, psz_name.c_str());
         input_item_AddOption(p_item, psz_option.c_str(), VLC_INPUT_OPTION_TRUSTED);
