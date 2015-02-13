@@ -116,12 +116,13 @@ static int open(access_t* p_access)
 static int Open(vlc_object_t* p_this)
 {
     auto p_access = (access_t*) p_this;
-    access_InitFields(p_access);
 
     try {
         auto r = open(p_access);
         if (r != VLC_SUCCESS)
             delete p_access->p_sys;
+        else
+            access_InitFields(p_access);
         return r;
     }
     catch (std::bad_alloc& e) {
@@ -181,7 +182,6 @@ static int Control(access_t* p_access, int i_query, va_list args)
         break;
 
     case ACCESS_SET_PAUSE_STATE:
-    case ACCESS_SET_SEEKPOINT:
         return VLC_SUCCESS;
 
     case ACCESS_GET_TITLE_INFO:

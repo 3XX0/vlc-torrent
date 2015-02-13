@@ -185,7 +185,7 @@ void TorrentAccess::SelectPieces(uint64_t offset)
             len = piece_size;
 
         handle_.piece_priority(i, 7);
-        queue_.pieces.push_back({i, off, len});
+        queue_.pieces.emplace_back(i, off, len);
         req.length -= len;
     }
 }

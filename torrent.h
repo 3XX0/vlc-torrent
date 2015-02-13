@@ -144,7 +144,7 @@ inline const lt::torrent_info& TorrentAccess::metadata() const
 
 inline bool TorrentAccess::has_metadata() const
 {
-    return (params_.ti == nullptr) ? false : true;
+    return params_.ti != nullptr;
 }
 
 inline const std::string& TorrentAccess::uri() const
