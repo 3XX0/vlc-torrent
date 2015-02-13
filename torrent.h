@@ -86,6 +86,7 @@ class TorrentAccess
             file_at_{-1},
             stopped_{false},
             download_dir_{nullptr, std::free},
+            cache_dir_{config_GetUserDir(VLC_CACHE_DIR), std::free},
             uri_{std::string{"torrent://"} + p_access->psz_location},
             fingerprint_{"VL", PACKAGE_VERSION_MAJOR, PACKAGE_VERSION_MINOR,
                                PACKAGE_VERSION_REVISION, PACKAGE_VERSION_EXTRA},
@@ -109,11 +110,13 @@ class TorrentAccess
         void Run();
         void HandleStateChanged(const lt::alert* alert);
         void HandleReadPiece(const lt::alert* alert);
+        std::string SaveFileBencoded(const std::string& name, const lt::entry& entry) const;
 
         access_t*               access_;
         int                     file_at_;
         std::atomic_bool        stopped_;
         unique_char_ptr         download_dir_;
+        unique_char_ptr         cache_dir_;
         std::string             uri_;
         lt::fingerprint         fingerprint_;
         lt::session             session_;

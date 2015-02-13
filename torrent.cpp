@@ -76,8 +76,6 @@ int TorrentAccess::RetrieveMetadata()
 {
     lt::error_code ec;
 
-    assert(download_dir_ != nullptr);
-
     session_.set_alert_mask(lta::status_notification);
     session_.add_extension(&lt::create_metadata_plugin);
     session_.add_extension(&lt::create_ut_metadata_plugin);
@@ -95,11 +93,10 @@ int TorrentAccess::RetrieveMetadata()
 
     // Create the torrent file.
     const auto torrent = lt::create_torrent{metadata};
-    const auto path = std::string{download_dir_.get()} + "/" + metadata.name() + ".torrent";
-    std::ofstream file{path, std::ios_base::binary};
-    if (!file.is_open())
+    const auto filename = metadata.info_hash().to_string() + ".torrent";
+    const auto path = SaveFileBencoded(filename, torrent.generate());
+    if (path.length() == 0)
         return VLC_EGENERIC;
-    lt::bencode(std::ostream_iterator<char>{file}, torrent.generate());
     uri_ = "torrent://" + path; // Change the initial URI to point to the torrent generated.
 
     return VLC_SUCCESS;
@@ -291,4 +288,18 @@ void TorrentAccess::ReadNextPiece(Piece& piece, bool& eof)
     piece = std::move(next_piece);
     queue_.pieces.pop_front();
     msg_Dbg(access_, "Got piece: %d", piece.id);
+}
+
+std::string TorrentAccess::SaveFileBencoded(const std::string& name, const lt::entry& entry) const
+{
+    if (cache_dir_ == nullptr)
+        return {};
+
+    const auto path = std::string{cache_dir_.get()} + "/" + name;
+    std::ofstream file{path, std::ios_base::binary};
+    if (!file.is_open())
+        return {};
+    lt::bencode(std::ostream_iterator<char>{file}, entry);
+
+    return path;
 }
