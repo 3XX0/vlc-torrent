@@ -110,7 +110,8 @@ class TorrentAccess
         void Run();
         void HandleStateChanged(const lt::alert* alert);
         void HandleReadPiece(const lt::alert* alert);
-        std::string SaveFileBencoded(const std::string& name, const lt::entry& entry) const;
+        std::string CacheSave(const std::string& name, const lt::entry& entry) const;
+        std::string CacheLookup(const std::string& name) const;
 
         access_t*               access_;
         int                     file_at_;

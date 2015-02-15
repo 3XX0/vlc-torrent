@@ -73,6 +73,19 @@ int TorrentAccess::ParseURI(const std::string& uri, lt::add_torrent_params& para
 int TorrentAccess::RetrieveMetadata()
 {
     lt::error_code ec;
+    const auto filename = lt::to_hex(params_.info_hash.to_string()) + ".torrent";
+
+    auto path = CacheLookup(filename);
+    if (!path.empty()) {
+        // XXX depending on the version of libtorrent, torrent_info is either a
+        // boost::intrusive_ptr or a boost::shared_ptr. Use decltype to handle them both.
+        params_.ti = decltype(params_.ti){new lt::torrent_info{path, ec}};
+        if (!ec) {
+            uri_ = "torrent://" + path; // Change the initial URI to point to the torrent in cache.
+            return VLC_SUCCESS;
+        }
+        params_.ti.reset();
+    }
 
     session_.set_alert_mask(lta::status_notification);
     session_.add_extension(&lt::create_metadata_plugin);
@@ -89,14 +102,13 @@ int TorrentAccess::RetrieveMetadata()
     // boost::intrusive_ptr or a boost::shared_ptr. Use decltype to handle them both.
     params_.ti = decltype(params_.ti){new lt::torrent_info{metadata}};
 
-    // Create the torrent file.
+    // Create the torrent file and save it in cache.
     const auto torrent = lt::create_torrent{metadata};
-    const auto filename = metadata.info_hash().to_string() + ".torrent";
-    const auto path = SaveFileBencoded(filename, torrent.generate());
-    if (path.length() == 0)
+    path = CacheSave(filename, torrent.generate());
+    if (path.empty())
         return VLC_EGENERIC;
-    uri_ = "torrent://" + path; // Change the initial URI to point to the torrent generated.
 
+    uri_ = "torrent://" + path; // Change the initial URI to point to the torrent in cache.
     return VLC_SUCCESS;
 }
 
@@ -288,16 +300,27 @@ void TorrentAccess::ReadNextPiece(Piece& piece, bool& eof)
     msg_Dbg(access_, "Got piece: %d", piece.id);
 }
 
-std::string TorrentAccess::SaveFileBencoded(const std::string& name, const lt::entry& entry) const
+std::string TorrentAccess::CacheSave(const std::string& name, const lt::entry& entry) const
 {
     if (cache_dir_ == nullptr)
         return {};
 
     const auto path = std::string{cache_dir_.get()} + "/" + name;
-    std::ofstream file{path, std::ios_base::binary};
+    std::ofstream file{path, std::ios_base::binary | std::ios_base::trunc};
     if (!file.is_open())
         return {};
     lt::bencode(std::ostream_iterator<char>{file}, entry);
+    return path;
+}
 
+std::string TorrentAccess::CacheLookup(const std::string& name) const
+{
+    if (cache_dir_ == nullptr)
+        return {};
+
+    const auto path = std::string{cache_dir_.get()} + "/" + name;
+    std::ifstream file{path};
+    if (!file.good())
+        return {};
     return path;
 }
