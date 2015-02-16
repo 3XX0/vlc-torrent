@@ -40,10 +40,15 @@
 
 TorrentAccess::~TorrentAccess()
 {
-    stopped_ = true;
     session_.pause();
-    if (handle_.is_valid())
+    if (handle_.is_valid()) {
+        handle_.save_resume_data(lth::flush_disk_cache);
+        auto lock = std::unique_lock<std::mutex>{resume_data_.mutex};
+        resume_data_.cond.wait(lock, [&s = resume_data_.saved]{ return s; });
         session_.remove_torrent(handle_);
+    }
+
+    stopped_ = true;
     if (thread_.joinable())
         thread_.join();
 }
@@ -73,8 +78,8 @@ int TorrentAccess::ParseURI(const std::string& uri, lt::add_torrent_params& para
 int TorrentAccess::RetrieveMetadata()
 {
     lt::error_code ec;
-    const auto filename = lt::to_hex(params_.info_hash.to_string()) + ".torrent";
 
+    const auto filename = torrent_hash() + ".torrent";
     auto path = CacheLookup(filename);
     if (!path.empty()) {
         set_metadata(path, ec);
@@ -109,10 +114,17 @@ int TorrentAccess::RetrieveMetadata()
 int TorrentAccess::StartDownload(int file_at)
 {
     lt::error_code ec;
+    std::vector<char> resume_data;
 
     assert(has_metadata() && file_at >= 0 && download_dir_ != nullptr);
 
     session_.set_alert_mask(lta::status_notification | lta::storage_notification | lta::progress_notification);
+
+    // Attempt to fast resume the torrent.
+    auto path = CacheLookup(torrent_hash() + ".resume");
+    if (!path.empty() && !lt::load_file(path, resume_data, ec) && !ec)
+        params_.resume_data = &resume_data;
+
     params_.save_path = download_dir_.get();
     params_.storage_mode = lt::storage_mode_allocate;
     handle_ = session_.add_torrent(params_, ec);
@@ -147,6 +159,9 @@ void TorrentAccess::Run()
                 }
                 case lt::state_changed_alert::alert_type:
                     HandleStateChanged(alert);
+                    break;
+                case lt::save_resume_data_alert::alert_type:
+                    HandleSaveResumeData(alert);
                     break;
                 case lt::read_piece_alert::alert_type:
                     HandleReadPiece(alert);
@@ -236,6 +251,17 @@ void TorrentAccess::HandleStateChanged(const lt::alert* alert)
     status_.cond.notify_one();
 }
 
+void TorrentAccess::HandleSaveResumeData(const lt::alert* alert)
+{
+    const auto a = lt::alert_cast<lt::save_resume_data_alert>(alert);
+
+    if (a->resume_data != nullptr)
+        CacheSave(torrent_hash() + ".resume", *a->resume_data);
+    auto lock = std::unique_lock<std::mutex>{resume_data_.mutex};
+    resume_data_.saved = true;
+    resume_data_.cond.notify_one();
+}
+
 void TorrentAccess::HandleReadPiece(const lt::alert* alert)
 {
     const auto a = lt::alert_cast<lt::read_piece_alert>(alert);
@@ -282,7 +308,7 @@ void TorrentAccess::ReadNextPiece(Piece& piece, bool& eof)
 
     auto& next_piece = queue_.pieces.front();
     if (!next_piece.requested) {
-        handle_.set_piece_deadline(next_piece.id, 0, lt::torrent_handle::alert_when_available);
+        handle_.set_piece_deadline(next_piece.id, 0, lth::alert_when_available);
         next_piece.requested = true;
         msg_Dbg(access_, "Piece requested: %d", next_piece.id);
     }

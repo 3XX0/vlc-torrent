@@ -43,6 +43,7 @@ namespace lt = libtorrent;
 
 using lta = lt::alert;
 using lts = lt::torrent_status;
+using lth = lt::torrent_handle;
 using unique_char_ptr = std::unique_ptr<char, void (*)(void*)>;
 using unique_block_ptr = std::unique_ptr<block_t, void (*)(block_t*)>;
 
@@ -78,6 +79,13 @@ struct Status
     lts::state_t            state;
 };
 
+struct ResumeDataSaved
+{
+    std::mutex              mutex;
+    std::condition_variable cond;
+    bool                    saved = false;
+};
+
 class TorrentAccess
 {
     public:
@@ -109,10 +117,12 @@ class TorrentAccess
     private:
         void Run();
         void HandleStateChanged(const lt::alert* alert);
+        void HandleSaveResumeData(const lt::alert* alert);
         void HandleReadPiece(const lt::alert* alert);
         std::string CacheSave(const std::string& name, const lt::entry& entry) const;
         std::string CacheLookup(const std::string& name) const;
 
+        const std::string& torrent_hash() const;
         void set_uri(const std::string& uri);
         void set_metadata(const lt::torrent_info& metadata);
         void set_metadata(const std::string& path, lt::error_code& ec);
@@ -125,6 +135,7 @@ class TorrentAccess
         std::string             uri_;
         lt::fingerprint         fingerprint_;
         lt::session             session_;
+        ResumeDataSaved         resume_data_;
         PiecesQueue             queue_;
         Status                  status_;
         lt::add_torrent_params  params_;
@@ -174,4 +185,10 @@ inline void TorrentAccess::set_uri(const std::string& uri)
 inline const std::string& TorrentAccess::uri() const
 {
     return uri_;
+}
+
+inline const std::string& TorrentAccess::torrent_hash() const
+{
+    static const auto hash = lt::to_hex(params_.info_hash.to_string());
+    return hash;
 }
