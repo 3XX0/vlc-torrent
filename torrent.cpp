@@ -267,7 +267,7 @@ void TorrentAccess::ReadNextPiece(Piece& piece, bool& eof)
 
     {
         auto lock = std::unique_lock<std::mutex>{status_.mutex};
-        auto cond = status_.cond.wait_for(lock, timeout, [s = status_.state]{
+        auto cond = status_.cond.wait_for(lock, timeout, [&s = status_.state]{
                 return s == lts::downloading || s == lts::finished || s == lts::seeding;
         });
         if (!cond)
