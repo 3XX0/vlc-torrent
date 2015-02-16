@@ -113,6 +113,10 @@ class TorrentAccess
         std::string CacheSave(const std::string& name, const lt::entry& entry) const;
         std::string CacheLookup(const std::string& name) const;
 
+        void set_uri(const std::string& uri);
+        void set_metadata(const lt::torrent_info& metadata);
+        void set_metadata(const std::string& path, lt::error_code& ec);
+
         access_t*               access_;
         int                     file_at_;
         std::atomic_bool        stopped_;
@@ -138,6 +142,20 @@ inline void TorrentAccess::set_parameters(lt::add_torrent_params&& params)
     params_ = std::move(params);
 }
 
+inline void TorrentAccess::set_metadata(const lt::torrent_info& metadata)
+{
+    // XXX depending on the version of libtorrent, torrent_info is either a
+    // boost::intrusive_ptr or a boost::shared_ptr. Use decltype to handle them both.
+    params_.ti = decltype(params_.ti){new lt::torrent_info{metadata}};
+}
+
+inline void TorrentAccess::set_metadata(const std::string& path, lt::error_code& ec)
+{
+    set_metadata({path, ec});
+    if (ec)
+        params_.ti.reset();
+}
+
 inline const lt::torrent_info& TorrentAccess::metadata() const
 {
     return *params_.ti;
@@ -146,6 +164,11 @@ inline const lt::torrent_info& TorrentAccess::metadata() const
 inline bool TorrentAccess::has_metadata() const
 {
     return params_.ti != nullptr;
+}
+
+inline void TorrentAccess::set_uri(const std::string& uri)
+{
+    uri_ = uri;
 }
 
 inline const std::string& TorrentAccess::uri() const

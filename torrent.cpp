@@ -77,14 +77,11 @@ int TorrentAccess::RetrieveMetadata()
 
     auto path = CacheLookup(filename);
     if (!path.empty()) {
-        // XXX depending on the version of libtorrent, torrent_info is either a
-        // boost::intrusive_ptr or a boost::shared_ptr. Use decltype to handle them both.
-        params_.ti = decltype(params_.ti){new lt::torrent_info{path, ec}};
+        set_metadata(path, ec);
         if (!ec) {
-            uri_ = "torrent://" + path; // Change the initial URI to point to the torrent in cache.
+            set_uri("torrent://" + path); // Change the initial URI to point to the torrent in cache.
             return VLC_SUCCESS;
         }
-        params_.ti.reset();
     }
 
     session_.set_alert_mask(lta::status_notification);
@@ -97,18 +94,15 @@ int TorrentAccess::RetrieveMetadata()
     Run();
     session_.remove_torrent(handle_);
 
-    const auto& metadata = handle_.get_torrent_info();
-    // XXX depending on the version of libtorrent, torrent_info is either a
-    // boost::intrusive_ptr or a boost::shared_ptr. Use decltype to handle them both.
-    params_.ti = decltype(params_.ti){new lt::torrent_info{metadata}};
-
     // Create the torrent file and save it in cache.
+    const auto& metadata = handle_.get_torrent_info();
     const auto torrent = lt::create_torrent{metadata};
     path = CacheSave(filename, torrent.generate());
     if (path.empty())
         return VLC_EGENERIC;
 
-    uri_ = "torrent://" + path; // Change the initial URI to point to the torrent in cache.
+    set_metadata(metadata);
+    set_uri("torrent://" + path); // Change the initial URI to point to the torrent in cache.
     return VLC_SUCCESS;
 }
 
