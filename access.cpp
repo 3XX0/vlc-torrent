@@ -63,6 +63,12 @@ vlc_module_begin()
 
     add_directory("download-dir", nullptr, N_("Download directory"),
       N_("Directory used to store dowloaded files"), false)
+    add_integer("upload-rate-limit", 0, N_("Upload rate limit (B/s) [0=unlimited]"),
+      N_("Maximum upload rate in bytes per second"), false)
+    add_integer("download-rate-limit", 0, N_("Download rate limit (B/s) [0=unlimited]"),
+      N_("Maximum download rate in bytes per second"), false)
+    add_float("share-ratio-limit", 2.0, N_("Share ratio limit"),
+      N_("Share ratio limit to maintain (uploaded bytes / downloaded bytes)"), false)
 
 vlc_module_end()
 

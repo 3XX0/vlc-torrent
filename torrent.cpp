@@ -117,6 +117,7 @@ int TorrentAccess::StartDownload(int file_at)
     assert(has_metadata() && file_at >= 0 && download_dir_ != nullptr);
 
     session_.set_alert_mask(lta::status_notification | lta::storage_notification | lta::progress_notification);
+    SetSessionSettings();
 
     // Attempt to fast resume the torrent.
     auto path = CacheLookup(torrent_hash() + ".resume");
@@ -137,6 +138,36 @@ int TorrentAccess::StartDownload(int file_at)
     const auto run = std::bind(std::mem_fn(&TorrentAccess::Run), this);
     thread_ = std::thread{run};
     return VLC_SUCCESS;
+}
+
+void TorrentAccess::SetSessionSettings()
+{
+    auto s = session_.settings();
+
+    auto upload_rate = var_InheritInteger(access_, "upload-rate-limit");
+    auto download_rate = var_InheritInteger(access_, "download-rate-limit");
+    auto share_ratio = var_InheritFloat(access_, "share-ratio-limit");
+
+    s.user_agent = "VLC Media Player/" VERSION " libtorrent/" LIBTORRENT_VERSION;
+    s.active_downloads = 1;
+    s.active_seeds = 1;
+    s.announce_to_all_trackers = true;         // Announce in parallel to all trackers.
+    s.use_dht_as_fallback = false;             // Use DHT regardless of trackers status.
+    s.initial_picker_threshold = 0;            // Pieces to pick at random before doing rarest first picking.
+    s.no_atime_storage = true;                 // Linux only O_NOATIME.
+    s.no_recheck_incomplete_resume = true;     // Don't check the file when resume data is incomplete.
+    s.max_queued_disk_bytes = 2 * 1024 * 1024; // I/O thread buffer queue in bytes (may limit the download rate).
+    s.cache_size = -1;                         // Disk read/write cache specified in units of 16 KiB (-1 for RAM/8).
+    s.max_peerlist_size = 3000;                // Maximum number of peers per torrent.
+    s.num_want = 200;                          // Number of peers requested per tracker.
+    s.torrent_connect_boost = s.num_want / 10; // Number of peers to try to connect to immediately.
+    s.share_ratio_limit = share_ratio;         // Share ratio limit (uploaded bytes / downloaded bytes)
+    s.upload_rate_limit = upload_rate;         // Limits the upload speed in bytes/sec
+    s.download_rate_limit = download_rate;     // Limits the download speed in bytes/sec
+    //s.recv_socket_buffer_size
+    //s.send_socket_buffer_size
+
+    session_.set_settings(s);
 }
 
 void TorrentAccess::Run()

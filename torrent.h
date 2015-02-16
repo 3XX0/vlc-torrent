@@ -116,6 +116,7 @@ class TorrentAccess
 
     private:
         void Run();
+        void SetSessionSettings();
         void HandleStateChanged(const lt::alert* alert);
         void HandleSaveResumeData(const lt::alert* alert);
         void HandleReadPiece(const lt::alert* alert);
