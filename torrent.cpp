@@ -98,13 +98,13 @@ int TorrentAccess::RetrieveMetadata()
     session_.remove_torrent(handle_);
 
     // Create the torrent file and save it in cache.
-    const auto metadata = handle_.get_torrent_info();
+    const auto& metadata = handle_.get_torrent_info();
+    set_metadata(metadata); // XXX must happen before create_torrent (create_torrent const_cast its args ...)
     const auto torrent = lt::create_torrent{metadata};
     path = CacheSave(filename, torrent.generate());
     if (path.empty())
         return VLC_EGENERIC;
 
-    set_metadata(metadata);
     set_uri("torrent://" + path); // Change the initial URI to point to the torrent in cache.
     return VLC_SUCCESS;
 }
