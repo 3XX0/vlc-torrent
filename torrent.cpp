@@ -66,9 +66,7 @@ int TorrentAccess::ParseURI(const std::string& uri, lt::add_torrent_params& para
             return VLC_EGENERIC;
     }
     else {
-        // XXX depending on the version of libtorrent, torrent_info is either a
-        // boost::intrusive_ptr or a boost::shared_ptr. Use decltype to handle them both.
-        params.ti = decltype(params.ti){new lt::torrent_info{uri_decoded, ec}};
+        params.ti.reset(new lt::torrent_info{uri_decoded, ec});
         if (ec)
             return VLC_EGENERIC;
     }

@@ -155,9 +155,7 @@ inline void TorrentAccess::set_parameters(lt::add_torrent_params&& params)
 
 inline void TorrentAccess::set_metadata(const lt::torrent_info& metadata)
 {
-    // XXX depending on the version of libtorrent, torrent_info is either a
-    // boost::intrusive_ptr or a boost::shared_ptr. Use decltype to handle them both.
-    params_.ti = decltype(params_.ti){new lt::torrent_info{metadata}};
+    params_.ti.reset(new lt::torrent_info{metadata});
 }
 
 inline void TorrentAccess::set_metadata(const std::string& path, lt::error_code& ec)
