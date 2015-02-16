@@ -95,7 +95,7 @@ int TorrentAccess::RetrieveMetadata()
     session_.remove_torrent(handle_);
 
     // Create the torrent file and save it in cache.
-    const auto& metadata = handle_.get_torrent_info();
+    const auto metadata = handle_.get_torrent_info();
     const auto torrent = lt::create_torrent{metadata};
     path = CacheSave(filename, torrent.generate());
     if (path.empty())
