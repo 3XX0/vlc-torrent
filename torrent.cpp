@@ -33,6 +33,8 @@
 #include <libtorrent/create_torrent.hpp>
 #include <libtorrent/extensions/metadata_transfer.hpp>
 #include <libtorrent/extensions/ut_metadata.hpp>
+#include <libtorrent/extensions/ut_pex.hpp>
+#include <libtorrent/extensions/smart_ban.hpp>
 #include <libtorrent/magnet_uri.hpp>
 #include <libtorrent/bencode.hpp>
 
@@ -117,6 +119,8 @@ int TorrentAccess::StartDownload(int file_at)
     assert(has_metadata() && file_at >= 0 && download_dir_ != nullptr);
 
     session_.set_alert_mask(lta::status_notification | lta::storage_notification | lta::progress_notification);
+    session_.add_extension(&lt::create_ut_pex_plugin);
+    session_.add_extension(&lt::create_smart_ban_plugin);
     SetSessionSettings();
 
     // Attempt to fast resume the torrent.
