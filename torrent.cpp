@@ -25,6 +25,8 @@
 #include <functional>
 #include <fstream>
 #include <chrono>
+#include <future>
+#include <unordered_map>
 
 #include <vlc_common.h>
 #include <vlc_url.h>
@@ -44,15 +46,36 @@ TorrentAccess::~TorrentAccess()
 {
     session_.pause();
     if (handle_.is_valid()) {
-        handle_.save_resume_data(lth::flush_disk_cache);
-        auto lock = std::unique_lock<std::mutex>{resume_data_.mutex};
-        resume_data_.cond.wait(lock, [&s = resume_data_.saved]{ return s; });
+        SaveSessionStates();
         session_.remove_torrent(handle_);
     }
 
     stopped_ = true;
     if (thread_.joinable())
         thread_.join();
+}
+
+void TorrentAccess::SaveSessionStates() const
+{
+    std::future<void> f;
+
+    // Save the DHT state.
+    try {
+        f = std::async(std::launch::async, [this]{
+            lt::entry state;
+            session_.save_state(state, lt::session::save_dht_state);
+            CacheSave("dht_state.dat", state);
+        });
+    }
+    catch (std::system_error&) {}
+
+    // Save resume data.
+    handle_.save_resume_data(lth::flush_disk_cache);
+    auto lock = std::unique_lock<std::mutex>{resume_data_.mutex};
+    resume_data_.cond.wait(lock, [&s = resume_data_.saved]{ return s; });
+
+    if (f.valid())
+        f.wait();
 }
 
 int TorrentAccess::ParseURI(const std::string& uri, lt::add_torrent_params& params)
@@ -114,7 +137,7 @@ int TorrentAccess::RetrieveMetadata()
 int TorrentAccess::StartDownload(int file_at)
 {
     lt::error_code ec;
-    std::vector<char> resume_data;
+    lt::lazy_entry entry;
 
     assert(has_metadata() && file_at >= 0 && download_dir_ != nullptr);
 
@@ -123,10 +146,16 @@ int TorrentAccess::StartDownload(int file_at)
     session_.add_extension(&lt::create_smart_ban_plugin);
     SetSessionSettings();
 
+    // Start the DHT
+    auto buf = CacheLoad("dht_state.dat");
+    if (buf.size() > 0 && !lazy_bdecode(buf.data(), buf.data() + buf.size(), entry, ec) && !ec)
+        session_.load_state(entry);
+    session_.start_dht();
+
     // Attempt to fast resume the torrent.
-    const auto path = CacheLookup(torrent_hash() + ".resume");
-    if (!path.empty() && !lt::load_file(path, resume_data, ec) && !ec)
-        params_.resume_data = &resume_data;
+    buf = CacheLoad(torrent_hash() + ".resume");
+    if (buf.size() > 0)
+        params_.resume_data = &buf;
 
     params_.save_path = download_dir_.get();
     params_.storage_mode = lt::storage_mode_allocate;
@@ -172,6 +201,14 @@ void TorrentAccess::SetSessionSettings()
     //s.send_socket_buffer_size
 
     session_.set_settings(s);
+
+    const auto routers = std::unordered_map<std::string, int>{
+        {"router.bittorrent.com", 6881},
+        {"router.utorrent.com", 6881},
+        {"router.bitcomet.com", 6881}
+    };
+    for (const auto& r : routers)
+        session_.add_dht_router(r);
 }
 
 void TorrentAccess::Run()
@@ -361,6 +398,7 @@ std::string TorrentAccess::CacheSave(const std::string& name, const lt::entry& e
     std::ofstream file{path, std::ios_base::binary | std::ios_base::trunc};
     if (!file)
         return {};
+
     lt::bencode(std::ostream_iterator<char>{file}, entry);
     return path;
 }
@@ -374,5 +412,23 @@ std::string TorrentAccess::CacheLookup(const std::string& name) const
     std::ifstream file{path};
     if (!file.good())
         return {};
+
     return path;
+}
+
+std::vector<char> TorrentAccess::CacheLoad(const std::string& name) const
+{
+    if (cache_dir_ == nullptr)
+        return {};
+
+    const auto path = std::string{cache_dir_.get()} + "/" + name;
+    std::ifstream file{path, std::ios_base::binary | std::ios_base::ate};
+    if (!file.good())
+        return {};
+
+    const auto len = file.tellg();
+    file.seekg(0);
+    std::vector<char> buf(len);
+    file.read(buf.data(), len);
+    return buf;
 }
