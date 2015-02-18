@@ -120,7 +120,7 @@ int TorrentAccess::StartDownload(int file_at)
     SetSessionSettings();
 
     // Attempt to fast resume the torrent.
-    auto path = CacheLookup(torrent_hash() + ".resume");
+    const auto path = CacheLookup(torrent_hash() + ".resume");
     if (!path.empty() && !lt::load_file(path, resume_data, ec) && !ec)
         params_.resume_data = &resume_data;
 
@@ -144,9 +144,9 @@ void TorrentAccess::SetSessionSettings()
 {
     auto s = session_.settings();
 
-    auto upload_rate = var_InheritInteger(access_, "upload-rate-limit");
-    auto download_rate = var_InheritInteger(access_, "download-rate-limit");
-    auto share_ratio = var_InheritFloat(access_, "share-ratio-limit");
+    const auto upload_rate = var_InheritInteger(access_, "upload-rate-limit");
+    const auto download_rate = var_InheritInteger(access_, "download-rate-limit");
+    const auto share_ratio = var_InheritFloat(access_, "share-ratio-limit");
 
     s.user_agent = "VLC Media Player/" VERSION " libtorrent/" LIBTORRENT_VERSION;
     s.active_downloads = 1;
@@ -161,9 +161,9 @@ void TorrentAccess::SetSessionSettings()
     s.max_peerlist_size = 3000;                // Maximum number of peers per torrent.
     s.num_want = 200;                          // Number of peers requested per tracker.
     s.torrent_connect_boost = s.num_want / 10; // Number of peers to try to connect to immediately.
-    s.share_ratio_limit = share_ratio;         // Share ratio limit (uploaded bytes / downloaded bytes)
-    s.upload_rate_limit = upload_rate;         // Limits the upload speed in bytes/sec
-    s.download_rate_limit = download_rate;     // Limits the download speed in bytes/sec
+    s.share_ratio_limit = share_ratio;         // Share ratio limit (uploaded bytes / downloaded bytes).
+    s.upload_rate_limit = upload_rate;         // Limits the upload speed in bytes/sec.
+    s.download_rate_limit = download_rate;     // Limits the download speed in bytes/sec.
     //s.recv_socket_buffer_size
     //s.send_socket_buffer_size
 
@@ -214,7 +214,7 @@ void TorrentAccess::SelectPieces(uint64_t offset)
     const auto num_pieces = meta.num_pieces();
     const auto req_pieces = std::ceil((float) (req.length + req.start) / piece_size);
 
-    auto lock = std::unique_lock<std::mutex>{queue_.mutex};
+    const auto lock = std::unique_lock<std::mutex>{queue_.mutex};
     queue_.pieces.clear();
 
     for (auto i = 0; i < num_pieces; ++i) {
@@ -275,18 +275,18 @@ void TorrentAccess::HandleStateChanged(const lt::alert* alert)
     }
     msg_Info(access_, "State changed to: %s", msg);
 
-    auto lock = std::unique_lock<std::mutex>{status_.mutex};
+    const auto lock = std::unique_lock<std::mutex>{status_.mutex};
     status_.state = a->state;
     status_.cond.notify_one();
 }
 
-void TorrentAccess::HandleSaveResumeData(const lt::alert* alert)
+void TorrentAccess::HandleSaveResumeData(const lt::alert* alert) const
 {
     const auto a = lt::alert_cast<lt::save_resume_data_alert>(alert);
 
     if (a->resume_data != nullptr)
         CacheSave(torrent_hash() + ".resume", *a->resume_data);
-    auto lock = std::unique_lock<std::mutex>{resume_data_.mutex};
+    const auto lock = std::unique_lock<std::mutex>{resume_data_.mutex};
     resume_data_.saved = true;
     resume_data_.cond.notify_one();
 }
@@ -300,7 +300,7 @@ void TorrentAccess::HandleReadPiece(const lt::alert* alert)
         return;
     }
 
-    auto lock = std::unique_lock<std::mutex>{queue_.mutex};
+    const auto lock = std::unique_lock<std::mutex>{queue_.mutex};
 
     auto p = std::find_if(std::begin(queue_.pieces), std::end(queue_.pieces),
       [a](const Piece& p) { return a->piece == p.id; }
@@ -317,12 +317,12 @@ void TorrentAccess::HandleReadPiece(const lt::alert* alert)
 
 void TorrentAccess::ReadNextPiece(Piece& piece, bool& eof)
 {
-    auto timeout = std::chrono::milliseconds{500};
+    const auto timeout = std::chrono::milliseconds{500};
     eof = false;
 
     {
         auto lock = std::unique_lock<std::mutex>{status_.mutex};
-        auto cond = status_.cond.wait_for(lock, timeout, [&s = status_.state]{
+        const auto cond = status_.cond.wait_for(lock, timeout, [&s = status_.state]{
                 return s == lts::downloading || s == lts::finished || s == lts::seeding;
         });
         if (!cond)
@@ -334,7 +334,6 @@ void TorrentAccess::ReadNextPiece(Piece& piece, bool& eof)
         eof = true;
         return;
     }
-
     auto& next_piece = queue_.pieces.front();
     if (!next_piece.requested) {
         handle_.set_piece_deadline(next_piece.id, 0, lth::alert_when_available);
@@ -356,7 +355,7 @@ std::string TorrentAccess::CacheSave(const std::string& name, const lt::entry& e
 
     const auto path = std::string{cache_dir_.get()} + "/" + name;
     std::ofstream file{path, std::ios_base::binary | std::ios_base::trunc};
-    if (!file.is_open())
+    if (!file)
         return {};
     lt::bencode(std::ostream_iterator<char>{file}, entry);
     return path;

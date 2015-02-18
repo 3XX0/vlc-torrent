@@ -118,7 +118,7 @@ class TorrentAccess
         void Run();
         void SetSessionSettings();
         void HandleStateChanged(const lt::alert* alert);
-        void HandleSaveResumeData(const lt::alert* alert);
+        void HandleSaveResumeData(const lt::alert* alert) const;
         void HandleReadPiece(const lt::alert* alert);
         std::string CacheSave(const std::string& name, const lt::entry& entry) const;
         std::string CacheLookup(const std::string& name) const;
@@ -136,7 +136,7 @@ class TorrentAccess
         std::string             uri_;
         lt::fingerprint         fingerprint_;
         lt::session             session_;
-        ResumeDataSaved         resume_data_;
+        mutable ResumeDataSaved resume_data_;
         PiecesQueue             queue_;
         Status                  status_;
         lt::add_torrent_params  params_;
