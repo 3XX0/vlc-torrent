@@ -44,10 +44,17 @@
 
 TorrentAccess::~TorrentAccess()
 {
+    const auto keep_files = var_InheritBool(access_, "keep-files");
+
     session_.pause();
     if (handle_.is_valid()) {
-        SaveSessionStates();
-        session_.remove_torrent(handle_);
+        SaveSessionStates(keep_files);
+        if (keep_files)
+            session_.remove_torrent(handle_);
+        else {
+            session_.remove_torrent(handle_, lt::session::delete_files);
+            CacheDel(torrent_hash() + ".torrent");
+        }
     }
 
     stopped_ = true;
@@ -55,13 +62,14 @@ TorrentAccess::~TorrentAccess()
         thread_.join();
 }
 
-void TorrentAccess::SaveSessionStates() const
+void TorrentAccess::SaveSessionStates(bool save_resume_data) const
 {
     std::future<void> f;
 
     // Save the DHT state.
     try {
-        f = std::async(std::launch::async, [this]{
+        const auto policy = save_resume_data ? std::launch::async : std::launch::deferred;
+        f = std::async(policy, [this]{
             lt::entry state;
             session_.save_state(state, lt::session::save_dht_state);
             CacheSave("dht_state.dat", state);
@@ -70,9 +78,11 @@ void TorrentAccess::SaveSessionStates() const
     catch (std::system_error&) {}
 
     // Save resume data.
-    handle_.save_resume_data(lth::flush_disk_cache);
-    auto lock = std::unique_lock<std::mutex>{resume_data_.mutex};
-    resume_data_.cond.wait(lock, [&s = resume_data_.saved]{ return s; });
+    if (save_resume_data) {
+        handle_.save_resume_data(lth::flush_disk_cache);
+        auto lock = std::unique_lock<std::mutex>{resume_data_.mutex};
+        resume_data_.cond.wait(lock, [&s = resume_data_.saved]{ return s; });
+    }
 
     if (f.valid())
         f.wait();
@@ -431,4 +441,13 @@ std::vector<char> TorrentAccess::CacheLoad(const std::string& name) const
     std::vector<char> buf(len);
     file.read(buf.data(), len);
     return buf;
+}
+
+void TorrentAccess::CacheDel(const std::string& name) const
+{
+    if (cache_dir_ == nullptr)
+        return;
+
+    const auto path = std::string{cache_dir_.get()} + "/" + name;
+    std::remove(path.c_str());
 }

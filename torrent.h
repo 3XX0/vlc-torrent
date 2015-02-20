@@ -117,13 +117,14 @@ class TorrentAccess
     private:
         void Run();
         void SetSessionSettings();
-        void SaveSessionStates() const;
+        void SaveSessionStates(bool save_resume_data) const;
         void HandleStateChanged(const lt::alert* alert);
         void HandleSaveResumeData(const lt::alert* alert) const;
         void HandleReadPiece(const lt::alert* alert);
         std::string CacheSave(const std::string& name, const lt::entry& entry) const;
         std::string CacheLookup(const std::string& name) const;
         std::vector<char> CacheLoad(const std::string& name) const;
+        void CacheDel(const std::string& name) const;
 
         const std::string& torrent_hash() const;
         void set_uri(const std::string& uri);
