@@ -190,8 +190,9 @@ void TorrentAccess::SetSessionSettings()
     const auto upload_rate = var_InheritInteger(access_, "upload-rate-limit");
     const auto download_rate = var_InheritInteger(access_, "download-rate-limit");
     const auto share_ratio = var_InheritFloat(access_, "share-ratio-limit");
+    const auto user_agent = unique_char_ptr{var_InheritString(access_, "user-agent"), std::free};
 
-    s.user_agent = "VLC Media Player/" VERSION " libtorrent/" LIBTORRENT_VERSION;
+    s.user_agent = std::string{user_agent.get()} + "/" VERSION " libtorrent/" LIBTORRENT_VERSION;
     s.active_downloads = 1;
     s.active_seeds = 1;
     s.announce_to_all_trackers = true;            // Announce in parallel to all trackers.
