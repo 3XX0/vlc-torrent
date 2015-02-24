@@ -65,10 +65,10 @@ vlc_module_begin()
       N_("Directory used to store dowloaded files"), false)
     add_bool("keep-files", true, N_("Keep downloaded files"),
       N_("Determine whether VLC keeps the dowloaded files or removes them after use"), false)
-    add_integer("upload-rate-limit", 0, N_("Upload rate limit (B/s) [0=unlimited]"),
-      N_("Maximum upload rate in bytes per second"), false)
-    add_integer("download-rate-limit", 0, N_("Download rate limit (B/s) [0=unlimited]"),
-      N_("Maximum download rate in bytes per second"), false)
+    add_integer("upload-rate-limit", 0, N_("Upload rate limit (kB/s) [0=unlimited]"),
+      N_("Maximum upload rate in kilobytes per second"), false)
+    add_integer("download-rate-limit", 0, N_("Download rate limit (kB/s) [0=unlimited]"),
+      N_("Maximum download rate in kilobytes per second"), false)
     add_float("share-ratio-limit", 2.0, N_("Share ratio limit"),
       N_("Share ratio limit to maintain (uploaded bytes / downloaded bytes)"), false)
 

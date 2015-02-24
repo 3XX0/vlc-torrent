@@ -205,8 +205,8 @@ void TorrentAccess::SetSessionSettings()
     s.num_want = 200;                          // Number of peers requested per tracker.
     s.torrent_connect_boost = s.num_want / 10; // Number of peers to try to connect to immediately.
     s.share_ratio_limit = share_ratio;         // Share ratio limit (uploaded bytes / downloaded bytes).
-    s.upload_rate_limit = upload_rate;         // Limits the upload speed in bytes/sec.
-    s.download_rate_limit = download_rate;     // Limits the download speed in bytes/sec.
+    s.upload_rate_limit = upload_rate * 1024;     // Limits the upload speed in bytes/sec.
+    s.download_rate_limit = download_rate * 1024; // Limits the download speed in bytes/sec.
     //s.recv_socket_buffer_size
     //s.send_socket_buffer_size
 
