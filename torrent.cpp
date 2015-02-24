@@ -65,6 +65,7 @@ void TorrentAccess::SaveSessionStates(bool save_resume_data) const
     std::future<void> f;
 
     // Save the DHT state.
+    // If we need to save the resume data as well, do it in a separate thread.
     try {
         const auto policy = save_resume_data ? std::launch::async : std::launch::deferred;
         f = std::async(policy, [this]{
@@ -76,6 +77,7 @@ void TorrentAccess::SaveSessionStates(bool save_resume_data) const
     catch (std::system_error&) {}
 
     // Save resume data.
+    // The actual saving process is done by the main thread (see Run/HandleSaveResumeData).
     if (save_resume_data) {
         handle_.save_resume_data(lth::flush_disk_cache);
         auto lock = std::unique_lock<std::mutex>{resume_data_.mutex};
