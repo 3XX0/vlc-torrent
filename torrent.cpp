@@ -323,7 +323,7 @@ void TorrentAccess::HandleStateChanged(const lt::alert* alert)
         default:
             return;
     }
-    msg_Info(access_, "State changed to: %s", msg);
+    msg_Info(access_, "Torrent state changed to: %s", msg);
 
     const auto lock = std::unique_lock<std::mutex>{status_.mutex};
     status_.state = a->state;

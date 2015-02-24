@@ -49,8 +49,8 @@ struct access_sys_t
 
 vlc_module_begin()
 
-    set_shortname(N_("Torrent / Magnet"))
-    set_description(N_("Torrent file and Magnet link"))
+    set_shortname(N_("Torrent/Magnet streaming"))
+    set_description(N_("Stream torrent files and magnet links"))
     set_capability("access", 51)
     set_category(CAT_INPUT)
     set_subcategory(SUBCAT_INPUT_ACCESS)
