@@ -125,20 +125,20 @@ class TorrentAccess
         void set_metadata(const lt::torrent_info& metadata);
         void set_metadata(const std::string& path, lt::error_code& ec);
 
-        access_t*               access_;
-        int                     file_at_;
-        std::atomic_bool        stopped_;
-        unique_char_ptr         download_dir_;
-        unique_char_ptr         cache_dir_;
-        std::string             uri_;
-        lt::fingerprint         fingerprint_;
-        lt::session             session_;
+        access_t*                  access_;
+        int                        file_at_;
+        std::atomic_bool           stopped_;
+        unique_char_ptr            download_dir_;
+        unique_char_ptr            cache_dir_;
+        std::string                uri_;
+        lt::fingerprint            fingerprint_;
+        lt::session                session_;
         mutable std::promise<void> resume_data_saved_;
-        PiecesQueue             queue_;
-        Status                  status_;
-        lt::add_torrent_params  params_;
-        lt::torrent_handle      handle_;
-        std::thread             thread_;
+        PiecesQueue                queue_;
+        Status                     status_;
+        lt::add_torrent_params     params_;
+        lt::torrent_handle         handle_;
+        std::thread                thread_;
 };
 
 inline void TorrentAccess::set_download_dir(unique_char_ptr&& dir)
