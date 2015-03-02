@@ -25,6 +25,7 @@
 #include <atomic>
 #include <thread>
 #include <mutex>
+#include <future>
 #include <condition_variable>
 
 #ifdef HAVE_CONFIG_H
@@ -77,13 +78,6 @@ struct Status
     std::mutex              mutex;
     std::condition_variable cond;
     lts::state_t            state;
-};
-
-struct ResumeDataSaved
-{
-    std::mutex              mutex;
-    std::condition_variable cond;
-    bool                    saved = false;
 };
 
 class TorrentAccess
@@ -139,7 +133,7 @@ class TorrentAccess
         std::string             uri_;
         lt::fingerprint         fingerprint_;
         lt::session             session_;
-        mutable ResumeDataSaved resume_data_;
+        mutable std::promise<void> resume_data_saved_;
         PiecesQueue             queue_;
         Status                  status_;
         lt::add_torrent_params  params_;

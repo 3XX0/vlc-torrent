@@ -23,7 +23,6 @@
 #include <functional>
 #include <fstream>
 #include <chrono>
-#include <future>
 #include <unordered_map>
 
 #include <vlc_common.h>
@@ -62,13 +61,13 @@ TorrentAccess::~TorrentAccess()
 
 void TorrentAccess::SaveSessionStates(bool save_resume_data) const
 {
-    std::future<void> f;
+    std::future<void> dht_state;
 
     // Save the DHT state.
     // If we need to save the resume data as well, do it in a separate thread.
     try {
         const auto policy = save_resume_data ? std::launch::async : std::launch::deferred;
-        f = std::async(policy, [this]{
+        dht_state = std::async(policy, [this]{
             lt::entry state;
             session_.save_state(state, lt::session::save_dht_state);
             CacheSave("dht_state.dat", state);
@@ -79,13 +78,13 @@ void TorrentAccess::SaveSessionStates(bool save_resume_data) const
     // Save resume data.
     // The actual saving process is done by the main thread (see Run/HandleSaveResumeData).
     if (save_resume_data) {
+        const auto resume_data_saved = resume_data_saved_.get_future();
         handle_.save_resume_data(lth::flush_disk_cache);
-        auto lock = std::unique_lock<std::mutex>{resume_data_.mutex};
-        resume_data_.cond.wait(lock, [&s = resume_data_.saved]{ return s; });
+        resume_data_saved.wait();
     }
 
-    if (f.valid())
-        f.wait();
+    if (dht_state.valid())
+        dht_state.wait();
 }
 
 int TorrentAccess::ParseURI(const std::string& uri, lt::add_torrent_params& params)
@@ -336,9 +335,7 @@ void TorrentAccess::HandleSaveResumeData(const lt::alert* alert) const
 
     if (a->resume_data != nullptr)
         CacheSave(torrent_hash() + ".resume", *a->resume_data);
-    const auto lock = std::unique_lock<std::mutex>{resume_data_.mutex};
-    resume_data_.saved = true;
-    resume_data_.cond.notify_one();
+    resume_data_saved_.set_value();
 }
 
 void TorrentAccess::HandleReadPiece(const lt::alert* alert)
