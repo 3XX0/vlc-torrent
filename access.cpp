@@ -49,7 +49,7 @@ struct access_sys_t
 
 vlc_module_begin()
 
-    set_shortname(N_("Torrent/Magnet streaming"))
+    set_shortname(N_("Torrent streaming"))
     set_description(N_("Stream torrent files and magnet links"))
     set_capability("access", 51)
     set_category(CAT_INPUT)
@@ -104,9 +104,9 @@ static int open(access_t* p_access)
     torrent.set_parameters(std::move(params));
     torrent.set_download_dir(std::move(dir));
 
-    if (!torrent.has_metadata()) {
+    if (!torrent.has_torrent_metadata()) {
         // This is a magnet link, first we need to generate the torrent file.
-        if (torrent.RetrieveMetadata() != VLC_SUCCESS)
+        if (torrent.RetrieveTorrentMetadata() != VLC_SUCCESS)
             return VLC_EGENERIC;
     }
     if (file_at < 0) {
@@ -156,7 +156,7 @@ static void Close(vlc_object_t* p_this)
 static int ReadDir(access_t* p_access, input_item_node_t* p_node)
 {
     const auto& torrent = p_access->p_sys->torrent;
-    const auto& metadata = torrent.metadata();
+    const auto& metadata = torrent.torrent_metadata();
 
     auto i = 0;
     for (auto f = metadata.begin_files(); f != metadata.end_files(); ++f, ++i) {

@@ -60,13 +60,13 @@ TorrentAccess::~TorrentAccess()
 
 void TorrentAccess::SaveSessionStates(bool save_resume_data) const
 {
-    std::future<void> dht_state;
+    std::future<void> dht_state_saved;
 
     // Save the DHT state.
     // If we need to save the resume data as well, do it in a separate thread.
     try {
         const auto policy = save_resume_data ? std::launch::async : std::launch::deferred;
-        dht_state = std::async(policy, [this]{
+        dht_state_saved = std::async(policy, [this]{
             lt::entry state;
             session_.save_state(state, lt::session::save_dht_state);
             CacheSave("dht_state.dat", state);
@@ -82,8 +82,8 @@ void TorrentAccess::SaveSessionStates(bool save_resume_data) const
         resume_data_saved.wait();
     }
 
-    if (dht_state.valid())
-        dht_state.wait();
+    if (dht_state_saved.valid())
+        dht_state_saved.wait();
 }
 
 int TorrentAccess::ParseURI(const std::string& uri, lt::add_torrent_params& params)
@@ -106,14 +106,14 @@ int TorrentAccess::ParseURI(const std::string& uri, lt::add_torrent_params& para
     return VLC_SUCCESS;
 }
 
-int TorrentAccess::RetrieveMetadata()
+int TorrentAccess::RetrieveTorrentMetadata()
 {
     lt::error_code ec;
 
     const auto filename = torrent_hash() + ".torrent";
     auto path = CacheLookup(filename);
     if (!path.empty()) {
-        set_metadata(path, ec);
+        set_torrent_metadata(path, ec);
         if (!ec) {
             set_uri("torrent://" + path); // Change the initial URI to point to the torrent in cache.
             return VLC_SUCCESS;
@@ -132,7 +132,7 @@ int TorrentAccess::RetrieveMetadata()
 
     // Create the torrent file and save it in cache.
     const auto& metadata = handle_.get_torrent_info();
-    set_metadata(metadata); // XXX must happen before create_torrent (create_torrent const_cast its args ...)
+    set_torrent_metadata(metadata); // XXX must happen before create_torrent (create_torrent const_cast its args ...)
     const auto torrent = lt::create_torrent{metadata};
     path = CacheSave(filename, torrent.generate());
     if (path.empty())
@@ -147,7 +147,7 @@ int TorrentAccess::StartDownload(int file_at)
     lt::error_code ec;
     lt::lazy_entry entry;
 
-    assert(has_metadata() && file_at >= 0 && download_dir_ != nullptr);
+    assert(has_torrent_metadata() && file_at >= 0 && download_dir_ != nullptr);
 
     session_.set_alert_mask(lta::status_notification | lta::storage_notification | lta::progress_notification);
     session_.add_extension(&lt::create_ut_pex_plugin);
@@ -253,15 +253,15 @@ void TorrentAccess::Run()
 
 void TorrentAccess::SelectPieces(uint64_t offset)
 {
-    assert(has_metadata() && file_at_ >= 0);
+    assert(has_torrent_metadata() && file_at_ >= 0);
 
-    const auto& meta = metadata();
-    const auto& file = meta.file_at(file_at_);
+    const auto& metadata = torrent_metadata();
+    const auto& file = metadata.file_at(file_at_);
 
-    const auto piece_size = meta.piece_length();
-    const auto num_pieces = meta.num_pieces();
-    const auto beg_req = meta.map_file(file_at_, offset, 1);
-    const auto end_req = meta.map_file(file_at_, file.size - 1, 1);
+    const auto piece_size = metadata.piece_length();
+    const auto num_pieces = metadata.num_pieces();
+    const auto beg_req = metadata.map_file(file_at_, offset, 1);
+    const auto end_req = metadata.map_file(file_at_, file.size - 1, 1);
 
     const auto lock = std::unique_lock<std::mutex>{queue_.mutex};
     queue_.pieces.clear();

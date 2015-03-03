@@ -97,15 +97,15 @@ class TorrentAccess
         ~TorrentAccess();
 
         static int ParseURI(const std::string& uri, lt::add_torrent_params& params);
-        int RetrieveMetadata();
+        int RetrieveTorrentMetadata();
         int StartDownload(int file_at);
         void ReadNextPiece(Piece& piece, bool& eof);
         void SelectPieces(uint64_t offset);
 
         void set_download_dir(unique_char_ptr&& dir);
         void set_parameters(lt::add_torrent_params&& params);
-        const lt::torrent_info& metadata() const;
-        bool has_metadata() const;
+        const lt::torrent_info& torrent_metadata() const;
+        bool has_torrent_metadata() const;
         const std::string& uri() const;
 
     private:
@@ -122,8 +122,8 @@ class TorrentAccess
 
         const std::string& torrent_hash() const;
         void set_uri(const std::string& uri);
-        void set_metadata(const lt::torrent_info& metadata);
-        void set_metadata(const std::string& path, lt::error_code& ec);
+        void set_torrent_metadata(const lt::torrent_info& metadata);
+        void set_torrent_metadata(const std::string& path, lt::error_code& ec);
 
         access_t*                  access_;
         int                        file_at_;
@@ -151,24 +151,24 @@ inline void TorrentAccess::set_parameters(lt::add_torrent_params&& params)
     params_ = std::move(params);
 }
 
-inline void TorrentAccess::set_metadata(const lt::torrent_info& metadata)
+inline void TorrentAccess::set_torrent_metadata(const lt::torrent_info& metadata)
 {
     params_.ti.reset(new lt::torrent_info{metadata});
 }
 
-inline void TorrentAccess::set_metadata(const std::string& path, lt::error_code& ec)
+inline void TorrentAccess::set_torrent_metadata(const std::string& path, lt::error_code& ec)
 {
-    set_metadata({path, ec});
+    set_torrent_metadata({path, ec});
     if (ec)
         params_.ti.reset();
 }
 
-inline const lt::torrent_info& TorrentAccess::metadata() const
+inline const lt::torrent_info& TorrentAccess::torrent_metadata() const
 {
     return *params_.ti;
 }
 
-inline bool TorrentAccess::has_metadata() const
+inline bool TorrentAccess::has_torrent_metadata() const
 {
     return params_.ti != nullptr;
 }
