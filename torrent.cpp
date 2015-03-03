@@ -19,7 +19,6 @@
  *****************************************************************************/
 
 #include <cassert>
-#include <cmath>
 #include <functional>
 #include <fstream>
 #include <chrono>
@@ -258,34 +257,35 @@ void TorrentAccess::SelectPieces(uint64_t offset)
 
     const auto& meta = metadata();
     const auto& file = meta.file_at(file_at_);
-    auto req = meta.map_file(file_at_, offset, file.size - offset);
+
     const auto piece_size = meta.piece_length();
     const auto num_pieces = meta.num_pieces();
-    const auto req_pieces = std::ceil((float) (req.length + req.start) / piece_size);
+    const auto beg_req = meta.map_file(file_at_, offset, 1);
+    const auto end_req = meta.map_file(file_at_, file.size - 1, 1);
 
     const auto lock = std::unique_lock<std::mutex>{queue_.mutex};
     queue_.pieces.clear();
 
+    if (offset == file.size)
+        return;
+
     for (auto i = 0; i < num_pieces; ++i) {
-        if (i < req.piece || i >= req.piece + req_pieces) {
+        if (i < beg_req.piece || i > end_req.piece) {
             handle_.piece_priority(i, 0); // Discard unwanted pieces.
             continue;
         }
 
-        auto len = 0;
         auto off = 0;
-        if (i == req.piece) { // First piece.
-            off = req.start;
-            len = (req.length < piece_size - off) ? req.length : piece_size - off;
+        auto len = piece_size;
+        if (i == beg_req.piece) { // First piece.
+            off = beg_req.start;
+            len = piece_size - off;
         }
-        else if (i == req.piece + req_pieces - 1) // Last piece.
-            len = req.length;
-        else
-            len = piece_size;
+        if (i == end_req.piece) // Last piece.
+            len = end_req.start + 1 - off;
 
         handle_.piece_priority(i, 7);
         queue_.pieces.emplace_back(i, off, len);
-        req.length -= len;
     }
 }
 
