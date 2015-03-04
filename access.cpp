@@ -115,10 +115,12 @@ static int open(access_t* p_access)
         p_access->pf_readdir = ReadDir;
         return VLC_SUCCESS;
     }
-    // Torrent file has been browsed, start the download.
-    ACCESS_SET_CALLBACKS(nullptr, Block, Control, Seek);
-    torrent.StartDownload(file_at);
-    return VLC_SUCCESS;
+    else {
+        // Torrent file has been browsed, start the download.
+        ACCESS_SET_CALLBACKS(nullptr, Block, Control, Seek);
+        torrent.StartDownload(file_at);
+        return VLC_SUCCESS;
+    }
 }
 
 static int Open(vlc_object_t* p_this)

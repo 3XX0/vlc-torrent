@@ -176,8 +176,7 @@ int TorrentAccess::StartDownload(int file_at)
     handle_.set_sequential_download(true);
     status_.state = handle_.status().state;
 
-    const auto run = std::bind(std::mem_fn(&TorrentAccess::Run), this);
-    thread_ = std::thread{run};
+    thread_ = std::thread{&TorrentAccess::Run, this};
     return VLC_SUCCESS;
 }
 
