@@ -400,7 +400,7 @@ std::string TorrentAccess::CacheSave(const std::string& name, const lt::entry& e
     if (cache_dir_ == nullptr)
         return {};
 
-    const auto path = std::string{cache_dir_.get()} + "/" + name;
+    const auto path = std::string{cache_dir_.get()} + DIR_SEP + name;
     std::ofstream file{path, std::ios_base::binary | std::ios_base::trunc};
     if (!file)
         return {};
@@ -414,7 +414,7 @@ std::string TorrentAccess::CacheLookup(const std::string& name) const
     if (cache_dir_ == nullptr)
         return {};
 
-    const auto path = std::string{cache_dir_.get()} + "/" + name;
+    const auto path = std::string{cache_dir_.get()} + DIR_SEP + name;
     std::ifstream file{path};
     if (!file.good())
         return {};
@@ -427,7 +427,7 @@ std::vector<char> TorrentAccess::CacheLoad(const std::string& name) const
     if (cache_dir_ == nullptr)
         return {};
 
-    const auto path = std::string{cache_dir_.get()} + "/" + name;
+    const auto path = std::string{cache_dir_.get()} + DIR_SEP + name;
     std::ifstream file{path, std::ios_base::binary | std::ios_base::ate};
     if (!file.good())
         return {};
@@ -444,6 +444,6 @@ void TorrentAccess::CacheDel(const std::string& name) const
     if (cache_dir_ == nullptr)
         return;
 
-    const auto path = std::string{cache_dir_.get()} + "/" + name;
+    const auto path = std::string{cache_dir_.get()} + DIR_SEP + name;
     std::remove(path.c_str());
 }
