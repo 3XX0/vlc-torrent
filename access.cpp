@@ -157,10 +157,13 @@ static void Close(vlc_object_t* p_this)
 
 static int ReadDir(access_t* p_access, input_item_node_t* p_node)
 {
+    using ItemsHeap = std::map<uint64_t, input_item_t*>;
+
     const auto& torrent = p_access->p_sys->torrent;
     const auto& metadata = torrent.torrent_metadata();
 
     auto i = 0;
+    ItemsHeap items;
     for (auto f = metadata.begin_files(); f != metadata.end_files(); ++f, ++i) {
         const auto psz_uri = torrent.uri().c_str();
         const auto psz_name = f->filename();
@@ -168,9 +171,13 @@ static int ReadDir(access_t* p_access, input_item_node_t* p_node)
 
         auto p_item = input_item_New(psz_uri, psz_name.c_str());
         input_item_AddOption(p_item, psz_option.c_str(), VLC_INPUT_OPTION_TRUSTED);
-        input_item_node_AppendItem(p_node, p_item);
-        input_item_Release(p_item);
+        items[f->size] = p_item;
     }
+    std::for_each(items.rbegin(), items.rend(), [p_node](ItemsHeap::value_type& p) {
+        input_item_node_AppendItem(p_node, p.second);
+        input_item_Release(p.second);
+    });
+
     return VLC_SUCCESS;
 }
 
