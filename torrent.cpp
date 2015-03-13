@@ -163,7 +163,11 @@ int TorrentAccess::StartDownload(int file_at)
     // Attempt to fast resume the torrent.
     buf = CacheLoad(torrent_hash() + ".resume");
     if (buf.size() > 0)
+#if LIBTORRENT_VERSION_MAJOR > 0
+        params_.resume_data = std::move(buf);
+#else
         params_.resume_data = &buf;
+#endif
 
     params_.save_path = download_dir_.get();
     params_.storage_mode = lt::storage_mode_allocate;

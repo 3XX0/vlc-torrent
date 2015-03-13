@@ -161,17 +161,18 @@ static int ReadDir(access_t* p_access, input_item_node_t* p_node)
 
     const auto& torrent = p_access->p_sys->torrent;
     const auto& metadata = torrent.torrent_metadata();
+    const auto& files = metadata.files();
 
-    auto i = 0;
     ItemsHeap items;
-    for (auto f = metadata.begin_files(); f != metadata.end_files(); ++f, ++i) {
+    for (auto i = 0; i < metadata.num_files(); ++i) {
+        const auto f = metadata.file_at(i);
         const auto psz_uri = torrent.uri().c_str();
-        const auto psz_name = f->filename();
+        const auto psz_name = files.file_name(i);
         const auto psz_option = "torrent-file-index=" + std::to_string(i);
 
         auto p_item = input_item_New(psz_uri, psz_name.c_str());
         input_item_AddOption(p_item, psz_option.c_str(), VLC_INPUT_OPTION_TRUSTED);
-        items[f->size] = p_item;
+        items[f.size] = p_item;
     }
     std::for_each(items.rbegin(), items.rend(), [p_node](ItemsHeap::value_type& p) {
         input_item_node_AppendItem(p_node, p.second);
