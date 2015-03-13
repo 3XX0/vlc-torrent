@@ -31,6 +31,8 @@
 #include <vlc_common.h>
 #include <vlc_access.h>
 
+#undef poll // XXX boost redefines poll inside libtorrent headers
+
 #include <libtorrent/session.hpp>
 #include <libtorrent/torrent_handle.hpp>
 #include <libtorrent/torrent_info.hpp>
