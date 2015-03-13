@@ -1,0 +1,41 @@
+From 87d3ef2874cba473d55f20f25079de92e3eefc76 Mon Sep 17 00:00:00 2001
+From: Jonathan Calmels <jbjcalmels@gmail.com>
+Date: Thu, 29 Jan 2015 15:11:25 +0100
+Subject: [PATCH 1/6] input: add torrent and magnet schemes
+
+---
+ src/input/item.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/input/item.c b/src/input/item.c
+index 76fc818..65bee8b 100644
+--- a/src/input/item.c
++++ b/src/input/item.c
+@@ -921,7 +921,7 @@ input_item_t *input_item_Copy( input_item_t *p_input )
+ 
+ struct item_type_entry
+ {
+-    const char psz_scheme[7];
++    const char psz_scheme[8];
+     uint8_t    i_type;
+ };
+ 
+@@ -964,6 +964,7 @@ static int GuessType( const input_item_t *p_item )
+         { "jack",   ITEM_TYPE_CARD },
+         { "linsys", ITEM_TYPE_CARD },
+         { "live",   ITEM_TYPE_NET }, /* livedotcom */
++        { "magnet", ITEM_TYPE_NET },
+         { "mms",    ITEM_TYPE_NET },
+         { "mtp",    ITEM_TYPE_DISC },
+         { "ofdm",   ITEM_TYPE_CARD },
+@@ -983,6 +984,7 @@ static int GuessType( const input_item_t *p_item )
+         { "svcd",   ITEM_TYPE_DISC },
+         { "tcp",    ITEM_TYPE_NET },
+         { "terres", ITEM_TYPE_CARD }, /* terrestrial */
++        { "torrent",ITEM_TYPE_NET },
+         { "udp",    ITEM_TYPE_NET },  /* udplite too */
+         { "unsv",   ITEM_TYPE_NET },
+         { "usdigi", ITEM_TYPE_CARD }, /* usdigital */
+-- 
+2.3.1
+

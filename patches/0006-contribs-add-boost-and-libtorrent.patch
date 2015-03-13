@@ -1,0 +1,136 @@
+From 9c9bd53054a00d89f023ddb0749af407cde15e22 Mon Sep 17 00:00:00 2001
+From: Jonathan Calmels <jbjcalmels@gmail.com>
+Date: Thu, 5 Mar 2015 16:19:36 +0100
+Subject: [PATCH 6/6] contribs: add boost and libtorrent
+
+---
+ contrib/src/boost/SHA512SUMS   |  1 +
+ contrib/src/boost/rules.mak    | 66 ++++++++++++++++++++++++++++++++++++++++++
+ contrib/src/torrent/SHA512SUMS |  1 +
+ contrib/src/torrent/rules.mak  | 25 ++++++++++++++++
+ 4 files changed, 93 insertions(+)
+ create mode 100644 contrib/src/boost/SHA512SUMS
+ create mode 100644 contrib/src/boost/rules.mak
+ create mode 100644 contrib/src/torrent/SHA512SUMS
+ create mode 100644 contrib/src/torrent/rules.mak
+
+diff --git a/contrib/src/boost/SHA512SUMS b/contrib/src/boost/SHA512SUMS
+new file mode 100644
+index 0000000..e617295
+--- /dev/null
++++ b/contrib/src/boost/SHA512SUMS
+@@ -0,0 +1 @@
++dab72a2373d3e00e95bad5b3191cb29d3c0157d9d09e5ea79a45489cc08c4e822fd2807faaadaeacc6a460dc9db3c7cd8e39b42fcf4aff9ee90468e940944206  boost_1_57_0.tar.gz
+diff --git a/contrib/src/boost/rules.mak b/contrib/src/boost/rules.mak
+new file mode 100644
+index 0000000..f44b43d
+--- /dev/null
++++ b/contrib/src/boost/rules.mak
+@@ -0,0 +1,66 @@
++# BOOST
++
++BOOST_VERSION := 1.57.0
++BOOST_VERSION_STR := $(subst .,_,$(BOOST_VERSION))
++BOOST_URL := http://sourceforge.net/projects/boost/files/boost/$(BOOST_VERSION)/boost_$(BOOST_VERSION_STR).tar.gz
++
++define JAM_FILE
++using gcc : vlc
++    : $(CXX)
++    : <cxxflags>$(CXXFLAGS)
++      <linkflags>$(LDFLAGS)
++      <archiver>$(AR)
++      <ranlib>$(RANLIB)
++;
++endef
++export JAM_FILE
++
++ifdef HAVE_BSD
++BOOST_TARGET := bsd
++endif
++ifdef HAVE_LINUX
++BOOST_TARGET := linux
++endif
++ifdef HAVE_MACOSX
++BOOST_TARGET := darwin
++endif
++ifdef HAVE_IOS
++BOOST_TARGET := iphone
++endif
++ifdef HAVE_ANDROID
++BOOST_TARGET := android
++endif
++ifdef HAVE_WIN32
++BOOST_TARGET := windows
++endif
++ifdef HAVE_SOLARIS
++BOOST_TARGET := solaris
++endif
++
++BOOST_CONF := --prefix="$(PREFIX)" \
++			  --with-thread \
++			  --with-filesystem \
++			  --with-date_time \
++			  link=static \
++			  toolset=gcc-vlc \
++			  variant=release \
++			  target-os=$(BOOST_TARGET)
++
++ifdef HAVE_WIN32
++BOOST_CONF += threadapi=win32
++endif
++
++$(TARBALLS)/boost_$(BOOST_VERSION_STR).tar.gz:
++	$(call download,$(BOOST_URL))
++
++.sum-boost: boost_$(BOOST_VERSION_STR).tar.gz
++
++boost: boost_$(BOOST_VERSION_STR).tar.gz .sum-boost
++	$(UNPACK)
++	$(MOVE)
++
++.boost: boost
++	echo "$$JAM_FILE" > $</tools/build/src/user-config.jam
++	cd $< && ./bootstrap.sh
++	cd $< && ./b2 install $(BOOST_CONF)
++	touch $@
+diff --git a/contrib/src/torrent/SHA512SUMS b/contrib/src/torrent/SHA512SUMS
+new file mode 100644
+index 0000000..292da59
+--- /dev/null
++++ b/contrib/src/torrent/SHA512SUMS
+@@ -0,0 +1 @@
++79d9536baaa7d4be613b06e33a2bd442ed6ec61388f8ebd223ac6a6c855ffc0ff9e0350d9a7ee928579470cd7f9f4dd5e3afad8a8e41fec2c70e81072495ef9f  libtorrent-rasterbar-1.0.3.tar.gz
+diff --git a/contrib/src/torrent/rules.mak b/contrib/src/torrent/rules.mak
+new file mode 100644
+index 0000000..2a6b960
+--- /dev/null
++++ b/contrib/src/torrent/rules.mak
+@@ -0,0 +1,25 @@
++# LIBTORRENT
++
++TORRENT_VERSION := 1.0.3
++TORRENT_URL := http://sourceforge.net/projects/libtorrent/files/libtorrent/libtorrent-rasterbar-$(TORRENT_VERSION).tar.gz
++
++ifeq ($(call need_pkg,"libtorrent-rasterbar"),)
++PKGS_FOUND += torrent
++endif
++
++DEPS_torrent = boost
++
++$(TARBALLS)/libtorrent-rasterbar-$(TORRENT_VERSION).tar.gz:
++	$(call download,$(TORRENT_URL))
++
++.sum-torrent: libtorrent-rasterbar-$(TORRENT_VERSION).tar.gz
++
++torrent: libtorrent-rasterbar-$(TORRENT_VERSION).tar.gz .sum-torrent
++	$(UNPACK)
++	$(MOVE)
++
++.torrent: torrent
++	cd $< && find . -name '*.cpp' | xargs sed -i 's/^#include <Win.*\.h>$$/\L&/'
++	cd $< && $(HOSTVARS) ./configure $(HOSTCONF) CPPFLAGS="$(CPPFLAGS) -DUNICODE" --with-boost=$(PREFIX) --disable-encryption --disable-geoip
++	cd $< && $(MAKE) install
++	touch $@
+-- 
+2.3.1
+
