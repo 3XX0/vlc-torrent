@@ -28,10 +28,6 @@
 #include <future>
 #include <condition_variable>
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
-
 #include <vlc_common.h>
 #include <vlc_access.h>
 
