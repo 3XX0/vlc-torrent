@@ -1,14 +1,14 @@
-From 14b9f55c2403a4ff89a96f1c085fd6366a2f2224 Mon Sep 17 00:00:00 2001
+From 1ebdb15cdaec2bb442a18cda120a02155eb1f350 Mon Sep 17 00:00:00 2001
 From: Jonathan Calmels <jbjcalmels@gmail.com>
 Date: Mon, 16 Feb 2015 22:08:32 +0100
-Subject: [PATCH 4/6] text: deduce magnet links as if the scheme was provided
+Subject: [PATCH 3/5] text: deduce magnet links as if the scheme was provided
 
 ---
  src/text/url.c | 11 +++++++++++
  1 file changed, 11 insertions(+)
 
 diff --git a/src/text/url.c b/src/text/url.c
-index 192d76b..5f59102 100644
+index f2d7fb9..ea02d25 100644
 --- a/src/text/url.c
 +++ b/src/text/url.c
 @@ -164,6 +164,17 @@ char *vlc_path2uri (const char *path, const char *scheme)
@@ -30,5 +30,5 @@ index 192d76b..5f59102 100644
      char p[strlen (path) + 1];
  
 -- 
-2.3.1
+2.1.4
 
