@@ -1,7 +1,7 @@
-From 9c9bd53054a00d89f023ddb0749af407cde15e22 Mon Sep 17 00:00:00 2001
+From cb1929c5f2d18c0bacd8ed950e1d2704c6031791 Mon Sep 17 00:00:00 2001
 From: Jonathan Calmels <jbjcalmels@gmail.com>
 Date: Thu, 5 Mar 2015 16:19:36 +0100
-Subject: [PATCH 6/6] contribs: add boost and libtorrent
+Subject: [PATCH 5/5] contribs: add boost and libtorrent
 
 ---
  contrib/src/boost/SHA512SUMS   |  1 +
@@ -132,5 +132,5 @@ index 0000000..2a6b960
 +	cd $< && $(MAKE) install
 +	touch $@
 -- 
-2.3.1
+2.1.4
 

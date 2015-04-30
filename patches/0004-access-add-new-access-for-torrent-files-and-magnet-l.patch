@@ -1,7 +1,7 @@
-From f93c9b1dafd0a379473a7aec97aebdb8c4d9254f Mon Sep 17 00:00:00 2001
+From bc8e6c22bbe87c86cf6bdc3915b11d67c7b11716 Mon Sep 17 00:00:00 2001
 From: Jonathan Calmels <jbjcalmels@gmail.com>
 Date: Mon, 16 Feb 2015 22:10:10 +0100
-Subject: [PATCH 5/6] access: add new access for torrent files and magnet links
+Subject: [PATCH 4/5] access: add new access for torrent files and magnet links
 
 ---
  configure.ac                       |  12 +
@@ -16,10 +16,10 @@ Subject: [PATCH 5/6] access: add new access for torrent files and magnet links
  create mode 100644 modules/access/torrent/torrent.h
 
 diff --git a/configure.ac b/configure.ac
-index 4101071..a095654 100644
+index d936bab..5657a0d 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -1612,6 +1612,18 @@ dnl
+@@ -1593,6 +1593,18 @@ dnl
  PKG_ENABLE_MODULES_VLC([ARCHIVE], [access_archive], [libarchive >= 3.1.0], (libarchive support), [auto])
  
  dnl
@@ -39,7 +39,7 @@ index 4101071..a095654 100644
  dnl
  AC_ARG_ENABLE(live555,
 diff --git a/modules/access/Makefile.am b/modules/access/Makefile.am
-index 3bc9146..15bbd0c 100644
+index b3fad9f..61d4bf6 100644
 --- a/modules/access/Makefile.am
 +++ b/modules/access/Makefile.am
 @@ -29,6 +29,13 @@ access_LTLIBRARIES += libfilesystem_plugin.la
@@ -53,7 +53,7 @@ index 3bc9146..15bbd0c 100644
 +access_LTLIBRARIES += $(LTLIBaccess_torrent)
 +EXTRA_LTLIBRARIES += libaccess_torrent_plugin.la
 +
- libimem_plugin_la_SOURCES = access/imem.c
+ libimem_plugin_la_SOURCES = access/imem-access.c
  libimem_plugin_la_LIBADD = $(LIBM)
  access_LTLIBRARIES += libimem_plugin.la
 diff --git a/modules/access/torrent/access.cpp b/modules/access/torrent/access.cpp
@@ -960,10 +960,10 @@ index 0000000..e6f2cef
 +    return hash;
 +}
 diff --git a/po/POTFILES.in b/po/POTFILES.in
-index 98369c1..7eab2dc 100644
+index 0433820..544725f 100644
 --- a/po/POTFILES.in
 +++ b/po/POTFILES.in
-@@ -262,6 +262,9 @@ modules/access/shm.c
+@@ -261,6 +261,9 @@ modules/access/shm.c
  modules/access/smb.c
  modules/access/tcp.c
  modules/access/timecode.c
@@ -974,5 +974,5 @@ index 98369c1..7eab2dc 100644
  modules/access/v4l2/controls.c
  modules/access/v4l2/v4l2.c
 -- 
-2.3.1
+2.1.4
 

@@ -1,7 +1,7 @@
-From d980556f584e74c2a29d96c77576f3323b2840b0 Mon Sep 17 00:00:00 2001
+From b4fe38d1c78aab1df09df1deca0807a54b971dbb Mon Sep 17 00:00:00 2001
 From: Jonathan Calmels <jbjcalmels@gmail.com>
 Date: Mon, 16 Feb 2015 22:08:01 +0100
-Subject: [PATCH 3/6] configure: add support for C++11
+Subject: [PATCH 2/5] configure: add support for C++11
 
 ---
  configure.ac    |   1 +
@@ -10,10 +10,10 @@ Subject: [PATCH 3/6] configure: add support for C++11
  create mode 100644 m4/stdcxx_11.m4
 
 diff --git a/configure.ac b/configure.ac
-index 27197ff..4101071 100644
+index 25cfd27..d936bab 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -83,6 +83,7 @@ dnl Check for compiler properties
+@@ -74,6 +74,7 @@ dnl Check for compiler properties
  AC_C_CONST
  AC_C_INLINE
  AC_C_RESTRICT
@@ -190,5 +190,5 @@ index 0000000..f3779d6
 +  fi
 +])
 -- 
-2.3.1
+2.1.4
 
